@@ -1,65 +1,113 @@
+"use client";
+
 import Image from "next/image";
 
-export default function Home() {
+export default function LoginPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
+    <section className="min-h-screen bg-[#3a0000]">
+      <div className="relative min-h-screen overflow-hidden">
+        
+        {/* Background */}
         <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
+          src="/background.png"
+          alt="Background"
+          fill
           priority
+          className="object-cover"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+
+        {/* Overlay */}
+        <div className="absolute inset-0 bg-black/60" />
+
+        <div className="relative z-10 flex min-h-screen flex-col md:flex-row">
+          
+          {/* ================= LEFT ================= */}
+          <div className="flex-1 flex flex-col justify-center px-12 pt-4 md:px-20 text-white">
+            
+            <h1 className="text-5xl font-extrabold tracking-wide mb-6">
+              PEMPROV SULSEL
+            </h1>
+
+            <p className="max-w-xl text-lg text-gray-200 leading-relaxed">
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit,
+              sed do eiusmod tempor incididunt ut labore et dolore
+              magna aliqua. Ut enim ad minim veniam.
+            </p>
+
+            {/* Pejabat */}
+            <div className="relative mt-10 flex items-end">
+              <Image
+                src="/gubernur.png"
+                alt="Gubernur"
+                width={420}
+                height={550}
+                className="object-contain z-10"
+              />
+              <Image
+                src="/wakil.png"
+                alt="Wakil"
+                width={380}
+                height={520}
+                className="object-contain -ml-16"
+              />
+            </div>
+          </div>
+
+          {/* ================= RIGHT ================= */}
+          <div className="flex-1 flex items-center justify-center px-10 md:px-20">
+            
+            <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-10 border-t-16 border-[#CB0E0E]">
+
+              {/* Logo floating */}
+              <div className="flex justify-center mb-6">
+                <div className="bg-[#CB0E0E] w-20 h-20 rounded-2xl flex items-center justify-center text-white text-3xl shadow-xl">
+                  <Image
+                  className="rotate-0"
+                    src="/logo.png" alt="Logo" width={50} height={50} />
+                </div>
+              </div>
+
+              <h2 className="text-center text-2xl font-bold text-gray-800">
+                E-MONITOR
+              </h2>
+              <p className="text-center text-gray-500 text-sm mb-8">
+                SULAWESI SELATAN
+              </p>
+
+              <form className="space-y-5">
+                <div>
+                  <label className="text-sm text-gray-600">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    className="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-gray-600">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    className="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-[#CB0E0E] hover:bg-red-700 transition text-white py-2 rounded-lg font-semibold shadow-md"
+                >
+                  Sign In
+                </button>
+              </form>
+
+            </div>
+          </div>
+
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      </div>
+    </section>
   );
 }
