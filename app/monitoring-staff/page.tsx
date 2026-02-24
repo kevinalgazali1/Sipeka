@@ -1,43 +1,95 @@
 "use client";
 
-import { Search, LogOut, ArrowRight, BookOpen, UserCircle2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Search,
+  LogOut,
+  ArrowRight,
+  BookOpen,
+  UserCircle2,
+} from "lucide-react";
+import { getCookie, deleteCookie } from "cookies-next";
+import { useRouter } from "next/navigation";
 
-const instansiList = [
-  {
-    nama: "Dinas BMBK",
-    deskripsi: "Bina Marga & Bina Konstruksi",
-    prioritas: "1 / 5",
-    warning: true,
-  },
-  {
-    nama: "DISDIK",
-    deskripsi: "Dinas Pendidikan",
-    prioritas: "1 / 5",
-    warning: false,
-  },
-  {
-    nama: "Dinas Kesehatan",
-    deskripsi: "",
-    prioritas: "1 / 5",
-    warning: true,
-  },
-  {
-    nama: "Dinas Pertanian",
-    deskripsi: "",
-    prioritas: "1 / 5",
-    warning: false,
-  },
-];
+interface DinasItem {
+  id: number;
+  namaDinas: string;
+  totalProgram: number;
+  programPrioritas: number;
+}
 
 export default function InstansiPage() {
+  const [instansiList, setInstansiList] = useState<DinasItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  const fetchInstansi = async () => {
+    try {
+      const token = getCookie("accessToken");
+
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_API}/staff/dinas`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const json = await res.json();
+
+      if (json?.data) {
+        setInstansiList(json.data);
+        console.log(json.data);
+      }
+    } catch (err) {
+      console.error("Error fetch dinas:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInstansi();
+  }, []);
+
+  const generateSlug = (nama: string) => {
+    return nama
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .trim()
+      .replace(/\s+/g, "-");
+  };
+
+  const handleMasukInstansi = (namaDinas: string) => {
+    const slug = generateSlug(namaDinas);
+    router.push(`/monitoring-staff/${slug}`);
+  };
+
+  const handleLogout = async () => {
+    try {
+      const token = getCookie("accessToken");
+
+      await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API}/auth/logout`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      deleteCookie("accessToken");
+      router.push("/");
+    }
+  };
+
   return (
     <section className="min-h-screen bg-[#2d0000]">
       <div className="bg-[#ececec] min-h-screen py-10 px-32">
-
         {/* ================= HEADER ================= */}
         <div className="flex justify-between items-start mb-8">
-          
-          {/* Left */}
           <div className="flex items-start gap-6">
             <div className="bg-[#CB0E0E] w-16 h-16 rounded-2xl rotate-6 flex items-center justify-center text-white text-3xl shadow-lg">
               <BookOpen />
@@ -53,31 +105,34 @@ export default function InstansiPage() {
             </div>
           </div>
 
-          {/* Right */}
           <div className="flex flex-col items-end gap-4">
             <div className="bg-white px-4 py-2 rounded-xl shadow flex items-center gap-3">
-              < UserCircle2 size={24} color="green" />
+              <UserCircle2 size={24} color="green" />
               <div>
-                <p className="text-sm font-semibold text-black">DR. AHMAD TRIA</p>
+                <p className="text-sm font-semibold text-black">
+                  DR. AHMAD TRIA
+                </p>
                 <p className="text-xs text-black">Staff</p>
               </div>
             </div>
 
-            <button className="flex items-center gap-2 text-sm bg-[#CB0E0E] text-white px-4 py-2 rounded-lg shadow hover:bg-red-800 transition">
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 text-sm bg-[#CB0E0E] text-white px-4 py-2 rounded-lg shadow hover:bg-red-800 transition"
+            >
               <LogOut size={16} />
               Logout
             </button>
           </div>
         </div>
 
-        {/* Divider */}
         <hr className="mb-8 border-gray-300" />
 
         {/* ================= SEARCH ================= */}
         <div className="flex justify-end mb-10">
           <div className="relative w-64">
             <Search
-              size={16} color="grey"
+              size={16}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
             />
             <input
@@ -90,55 +145,46 @@ export default function InstansiPage() {
 
         {/* ================= CARD GRID ================= */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-10 text-black">
-          {instansiList.map((item, i) => (
-            <div
-              key={i}
-              className="relative w-50 bg-white rounded-3xl shadow-lg p-6 hover:shadow-xl transition border-t-16 border-[#CB0E0E]"
-            >
+          {loading && <p>Loading...</p>}
 
-              {/* Icon + Warning */}
-              <div className="flex justify-between items-center mt-6 mb-6">
-                <div className="bg-[#CB0E0E] w-14 h-14 rounded-2xl flex items-center justify-center text-white text-2xl shadow">
-                  <BookOpen />
-                </div>
-
-                {item.warning && (
-                  <div className="bg-red-100 text-[#CB0E0E] px-3 py-1 rounded-full text-xs flex items-center gap-1 shadow">
-                    ⚠
+          {!loading &&
+            instansiList.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => handleMasukInstansi(item.namaDinas)}
+                className="relative w-50 bg-white rounded-3xl shadow-lg p-6 hover:shadow-xl transition border-t-16 border-[#CB0E0E] cursor-pointer"
+              >
+                <div className="flex justify-between items-center mt-6 mb-6">
+                  <div className="bg-[#CB0E0E] w-14 h-14 rounded-2xl flex items-center justify-center text-white text-2xl shadow">
+                    <BookOpen />
                   </div>
-                )}
-              </div>
 
-              {/* Content */}
-              <h2 className="text-xl font-bold mb-1">
-                {item.nama}
-              </h2>
+                  {item.programPrioritas === 0 && (
+                    <div className="bg-red-100 text-[#CB0E0E] px-3 py-1 rounded-full text-xs flex items-center gap-1 shadow">
+                      ⚠
+                    </div>
+                  )}
+                </div>
 
-              {item.deskripsi && (
-                <p className="text-xs text-gray-500 mb-4">
-                  {item.deskripsi}
+                <h2 className="text-xl font-bold mb-1">{item.namaDinas}</h2>
+
+                <p className="text-xs text-gray-500">Program Prioritas</p>
+
+                <p className="text-sm text-[#CB0E0E] font-semibold mb-8">
+                  {item.programPrioritas} / {item.totalProgram}
                 </p>
-              )}
 
-              <p className="text-xs text-gray-500">
-                Program Prioritas
-              </p>
-              <p className="text-sm text-[#CB0E0E] font-semibold mb-8">
-                {item.prioritas}
-              </p>
+                <div className="flex justify-between items-center">
+                  <button className="text-xs text-[#CB0E0E] tracking-widest uppercase">
+                    Masuk Instansi
+                  </button>
 
-              {/* Footer */}
-              <div className="flex justify-between items-center">
-                <button className="text-xs text-[#CB0E0E] tracking-widest uppercase">
-                  Masuk Instansi
-                </button>
-
-                <div className="w-7 h-7 rounded-full border border-gray-400 flex items-center justify-center">
-                  <ArrowRight size={14} />
+                  <div className="w-7 h-7 rounded-full border border-gray-400 flex items-center justify-center">
+                    <ArrowRight size={14} />
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
       </div>
     </section>

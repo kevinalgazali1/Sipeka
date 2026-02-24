@@ -4,14 +4,15 @@ import { useState, useRef, useEffect } from "react";
 import { X, ChevronDown, Check } from "lucide-react";
 
 type Option = {
+  id: number;
   label: string;
   value: string;
 };
 
 type Props = {
   options: Option[];
-  selected: string[];
-  onChange: (values: string[]) => void;
+  selected: number[];
+  onChange: (values: number[]) => void;
 };
 
 export default function MultiSelectMetode({
@@ -34,16 +35,16 @@ export default function MultiSelectMetode({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const toggleSelect = (value: string) => {
-    if (selected.includes(value)) {
-      onChange(selected.filter((item) => item !== value));
+  const toggleSelect = (id: number) => {
+    if (selected.includes(id)) {
+      onChange(selected.filter((item) => item !== id));
     } else {
-      onChange([...selected, value]);
+      onChange([...selected, id]);
     }
   };
 
-  const removeItem = (value: string) => {
-    onChange(selected.filter((item) => item !== value));
+  const removeItem = (id: number) => {
+    onChange(selected.filter((item) => item !== id));
   };
 
   return (
@@ -65,12 +66,12 @@ export default function MultiSelectMetode({
       {open && (
         <div className="absolute bottom-full mb-2 w-full bg-white border rounded-lg shadow-lg max-h-60 overflow-auto z-50">
           {options.map((item) => {
-            const isSelected = selected.includes(item.value);
+            const isSelected = selected.includes(item.id);
 
             return (
               <div
-                key={item.value}
-                onClick={() => toggleSelect(item.value)}
+                key={item.id}
+                onClick={() => toggleSelect(item.id)}
                 className="px-4 py-2 hover:bg-red-50 cursor-pointer flex justify-between items-center"
               >
                 <span>{item.label}</span>
@@ -83,16 +84,16 @@ export default function MultiSelectMetode({
 
       {/* Selected Chips */}
       <div className="flex flex-wrap gap-2">
-        {selected.map((value) => {
-          const item = options.find((opt) => opt.value === value);
+        {selected.map((id) => {
+          const item = options.find((opt) => opt.id === id);
 
           return (
             <div
-              key={value}
+              key={id}
               className="flex items-center gap-2 bg-red-100 text-[#CB0E0E] px-3 py-1 rounded-full text-sm"
             >
               {item?.label}
-              <button onClick={() => removeItem(value)}>
+              <button onClick={() => removeItem(id)}>
                 <X size={14} />
               </button>
             </div>
