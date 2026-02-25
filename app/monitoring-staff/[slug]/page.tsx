@@ -1,6 +1,5 @@
 "use client";
 
-
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getCookie } from "cookies-next";
@@ -59,6 +58,7 @@ export default function ProgramPage() {
     {},
   );
   const [submitting, setSubmitting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const params = useParams();
   const router = useRouter();
@@ -152,14 +152,17 @@ export default function ProgramPage() {
         })),
       };
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API}/staff/program`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_API}/staff/program`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      });
+      );
 
       if (!res.ok) {
         throw new Error();
@@ -232,6 +235,10 @@ export default function ProgramPage() {
     });
   };
 
+  const filteredProgram = programList.filter((item) =>
+    item.namaProgram.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
+
   return (
     <section className="min-h-screen">
       <div className="bg-[#ececec] min-h-screen py-10 px-32 text-black">
@@ -245,7 +252,9 @@ export default function ProgramPage() {
             />
             <input
               type="text"
-              placeholder="cari program"
+              placeholder="Cari program..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-4 py-2 rounded-lg border placeholder:text-gray-600 border-gray-300 bg-white focus:ring-2 focus:ring-red-500 outline-none"
             />
           </div>
@@ -290,8 +299,15 @@ export default function ProgramPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-10 text-black">
           {loading && <p>Loading...</p>}
 
+          {!loading && filteredProgram.length === 0 && (
+            <p className="text-gray-500 col-span-full text-center">
+              Program tidak ditemukan
+            </p>
+          )}
+
           {!loading &&
-            programList.map((item) => {
+            filteredProgram.length > 0 &&
+            filteredProgram.map((item) => {
               const subSlug = slugify(item.namaProgram);
 
               return (

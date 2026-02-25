@@ -1,10 +1,12 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import TimelineTable from "@/components/TimelineTable";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import * as XLSX from "xlsx";
 import {
   Search,
   Upload,
@@ -14,7 +16,7 @@ import {
   Building2,
   Loader2,
 } from "lucide-react";
-import { getCookie } from "cookies-next"; // or your preferred cookie utility
+import { getCookie } from "cookies-next";
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -163,6 +165,78 @@ export default function MonitoringProgramPage() {
     return num.toLocaleString("id-ID");
   };
 
+  const handleDownloadTimeline = () => {
+    if (!program) return;
+
+    const data: any[] = [];
+
+    const formatDate = (dateString: string | null) => {
+      if (!dateString) return "";
+      return new Date(dateString);
+    };
+
+    program.pengadaanList.forEach((pengadaan) => {
+      pengadaan.tahapanList.forEach((tahapan) => {
+        const status = getTahapanBarStatus(tahapan);
+
+        data.push({
+          Program: program.namaProgram,
+          Dinas: program.dinas?.namaDinas ?? "",
+          Pengadaan: pengadaan.namaTransaksi,
+          Tahapan: tahapan.namaTahapan,
+          "Planning Mulai": formatDate(tahapan.progres.planningTanggalMulai),
+          "Planning Selesai": formatDate(
+            tahapan.progres.planningTanggalSelesai,
+          ),
+          "Aktual Mulai": formatDate(tahapan.progres.aktualTanggalMulai),
+          "Aktual Selesai": formatDate(tahapan.progres.aktualTanggalSelesai),
+          Status: status,
+          Keterangan: tahapan.progres.keterangan ?? "",
+        });
+      });
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+
+    // 🔥 FORMAT KOLOM TANGGAL
+    const range = XLSX.utils.decode_range(worksheet["!ref"]!);
+
+    for (let R = 1; R <= range.e.r; ++R) {
+      ["E", "F", "G", "H"].forEach((col) => {
+        const cellAddress = col + (R + 1);
+        const cell = worksheet[cellAddress];
+        if (cell && cell.v instanceof Date) {
+          cell.t = "d"; // tipe date
+          cell.z = "dd/mm/yyyy"; // format tanggal saja
+        }
+      });
+    }
+
+    // Auto width
+    const colWidths = Object.keys(data[0] || {}).map((key) => ({
+      wch: Math.max(
+        key.length,
+        ...data.map((row) =>
+          row[key] instanceof Date
+            ? 12
+            : row[key]
+              ? row[key].toString().length
+              : 10,
+        ),
+      ),
+    }));
+
+    worksheet["!cols"] = colWidths;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Timeline");
+
+    XLSX.writeFile(
+      workbook,
+      `Timeline-${program.slug}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    );
+  };
+
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -230,7 +304,10 @@ export default function MonitoringProgramPage() {
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-xl shadow flex gap-4 items-center cursor-pointer hover:bg-gray-50 transition-colors">
+          <div
+            onClick={handleDownloadTimeline}
+            className="bg-white p-4 rounded-xl shadow flex gap-4 items-center cursor-pointer hover:bg-gray-50 transition-colors"
+          >
             <Download className="text-gray-600 shrink-0" />
             <p className="text-sm font-semibold">DOWNLOAD</p>
           </div>

@@ -128,21 +128,6 @@ export default function InstansiPage() {
 
         <hr className="mb-8 border-gray-300" />
 
-        {/* ================= SEARCH ================= */}
-        <div className="flex justify-end mb-10">
-          <div className="relative w-64">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <input
-              type="text"
-              placeholder="cari dinas"
-              className="w-full pl-9 pr-4 py-2 rounded-lg border placeholder:text-gray-400 border-gray-300 bg-white focus:ring-2 focus:ring-red-500 outline-none"
-            />
-          </div>
-        </div>
-
         {/* ================= CARD GRID ================= */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-10 text-black">
           {loading && <p>Loading...</p>}

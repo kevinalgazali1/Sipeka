@@ -40,14 +40,6 @@ interface TimelineTableProps {
   filterStatus?: string; // "semua" | "aman" | "terlambat"
 }
 
-// ─── Bar Status Helper ──────────────────────────────────────────────────────────
-
-/**
- * Classifies a tahapan's status based on bar colour logic:
- * - "aman"      → actual bar is green, or no actual yet but planning end not passed
- * - "terlambat" → actual bar is red, or no actual yet and planning end has passed
- * - "none"      → no planning dates at all
- */
 function getTahapanBarStatus(tahapan: Tahapan): "aman" | "terlambat" | "none" {
   const { aktualTanggalMulai, aktualTanggalSelesai, planningTanggalSelesai } =
     tahapan.progres;
@@ -291,26 +283,6 @@ function DateSelectors({
   );
 }
 
-function ModalFooter({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="flex gap-3 mt-6">
-      <button
-        onClick={onClose}
-        className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors tracking-wider"
-      >
-        BATALKAN
-      </button>
-      <button
-        onClick={onClose}
-        className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-green-500 hover:bg-green-600 transition-colors flex items-center justify-center gap-2 shadow-md shadow-green-200"
-      >
-        <Save size={15} />
-        SIMPAN DATA
-      </button>
-    </div>
-  );
-}
-
 function PlanModal({
   tahapan,
   onClose,
@@ -432,6 +404,66 @@ function UpdateModal({
     tahapan.progres.keterangan ?? "",
   );
   const fileRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSave() {
+    if (!mulai || !selesai || !keterangan) {
+      toast.error("Semua field wajib diisi");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const loadingToast = toast.loading("Menyimpan data aktual...");
+
+      const token = getCookie("accessToken");
+
+      if (!token) {
+        toast.dismiss(loadingToast);
+        toast.error("Session habis, silakan login ulang");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("aktualTanggalMulai", formatToMMDDYYYY(mulai));
+      formData.append("aktualTanggalSelesai", formatToMMDDYYYY(selesai));
+      formData.append("keterangan", keterangan);
+
+      if (selectedFile) {
+        formData.append("dokumen", selectedFile);
+      }
+
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_API}/staff/progres/${tahapan.progres.idProgres}/aktual`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        },
+      );
+
+      const result = await res.json();
+
+      toast.dismiss(loadingToast);
+
+      if (!res.ok) {
+        throw new Error(result?.msg || "Gagal menyimpan aktual");
+      }
+
+      toast.success(result.msg || "Berhasil menyimpan data aktual");
+
+      onClose();
+      window.location.reload();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Terjadi kesalahan");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <ModalShell onClose={onClose}>
@@ -469,7 +501,11 @@ function UpdateModal({
               accept=".pdf"
               className="hidden"
               onChange={(e) => {
-                if (e.target.files?.[0]) setFileName(e.target.files[0].name);
+                const file = e.target.files?.[0];
+                if (file) {
+                  setSelectedFile(file);
+                  setFileName(file.name);
+                }
               }}
             />
           </div>
@@ -488,7 +524,23 @@ function UpdateModal({
           />
         </div>
 
-        <ModalFooter onClose={onClose} />
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200"
+          >
+            BATALKAN
+          </button>
+
+          <button
+            onClick={handleSave}
+            disabled={loading}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-green-500 hover:bg-green-600 flex items-center justify-center gap-2"
+          >
+            <Save size={15} />
+            {loading ? "MENYIMPAN..." : "SIMPAN DATA"}
+          </button>
+        </div>
       </div>
     </ModalShell>
   );
@@ -496,6 +548,24 @@ function UpdateModal({
 
 // ─── Main Component ─────────────────────────────────────────────────────────────
 type ModalType = "plan" | "update";
+
+async function handleOpenPDF(dokumenBukti: any[]) {
+  if (!dokumenBukti || dokumenBukti.length === 0) {
+    toast.error("Dokumen belum tersedia");
+    return;
+  }
+
+  const token = getCookie("accessToken");
+  if (!token) {
+    toast.error("Session habis, silakan login ulang");
+    return;
+  }
+
+  const fileUrl = dokumenBukti[0].fileUrl;
+  const fullUrl = `https://sulsel.cloud${fileUrl}`;
+
+  window.open(fullUrl, "_blank");
+}
 
 export default function TimelineTable({
   namaProgram = "Program",
@@ -558,6 +628,12 @@ export default function TimelineTable({
                       {g.label}
                     </th>
                   ))}
+                  <th
+                    rowSpan={2}
+                    className="border border-gray-200 px-4 py-3 bg-gray-100 text-center font-semibold text-gray-700 w-64 min-w-[250px]"
+                  >
+                    Keterangan
+                  </th>
                 </tr>
                 <tr>
                   {columns.map((col, i) => (
@@ -576,7 +652,7 @@ export default function TimelineTable({
                     {/* Pengadaan Group Header */}
                     <tr key={`header-${pengadaan.id}`}>
                       <td
-                        colSpan={columns.length + 1}
+                        colSpan={columns.length + 2}
                         className="border border-gray-200 px-4 py-2 bg-red-50 text-xs font-bold text-[#CB0E0E] uppercase tracking-wide"
                       >
                         {pengadaan.namaTransaksi}
@@ -674,7 +750,22 @@ export default function TimelineTable({
                                   {tahapan.namaTahapan}
                                 </div>
                                 <div className="flex gap-1 mt-2">
-                                  <button className="px-2 py-0.5 text-[10px] border border-gray-300 rounded-full text-black hover:bg-gray-50 shadow-sm">
+                                  <button
+                                    onClick={() =>
+                                      handleOpenPDF(
+                                        tahapan.progres.dokumenBukti,
+                                      )
+                                    }
+                                    disabled={
+                                      !tahapan.progres.dokumenBukti?.length
+                                    }
+                                    className={`px-2 py-0.5 text-[10px] border rounded-full shadow-sm
+                                    ${
+                                      tahapan.progres.dokumenBukti?.length
+                                        ? "border-gray-300 text-black hover:bg-gray-50"
+                                        : "border-gray-200 text-gray-400 cursor-not-allowed"
+                                    }`}
+                                  >
                                     PDF
                                   </button>
                                   <button
@@ -742,6 +833,18 @@ export default function TimelineTable({
                               </td>
                             );
                           })}
+
+                          <td className="border border-gray-200 px-3 py-2 text-xs bg-white align-top min-w-[250px]">
+                            {tahapan.progres.keterangan ? (
+                              <div className="text-gray-700 leading-snug">
+                                {tahapan.progres.keterangan}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 italic">
+                                Belum ada keterangan
+                              </span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
