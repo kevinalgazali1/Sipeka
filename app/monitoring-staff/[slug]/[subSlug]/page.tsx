@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import TimelineTable from "@/components/TimelineTable";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import {
   Search,
   Upload,
@@ -43,6 +44,7 @@ interface Pengadaan {
   id: number;
   namaTransaksi: string;
   jenisPengadaan: string;
+  title: string;
   createdAt: string;
   tahapanList: Tahapan[];
 }
@@ -59,9 +61,39 @@ interface ProgramDetail {
   pengadaanList: Pengadaan[];
 }
 
+// ─── Helper: classify a tahapan's bar status ────────────────────────────────────
+
+function getTahapanBarStatus(tahapan: Tahapan): "aman" | "terlambat" | "none" {
+  const { aktualTanggalMulai, aktualTanggalSelesai, planningTanggalSelesai } =
+    tahapan.progres;
+
+  // If there's an actual bar, colour determines status
+  if (aktualTanggalMulai) {
+    if (aktualTanggalSelesai && planningTanggalSelesai) {
+      return new Date(aktualTanggalSelesai) <= new Date(planningTanggalSelesai)
+        ? "aman"
+        : "terlambat";
+    }
+    // Aktual started but not finished — check if we're past planning end
+    if (planningTanggalSelesai) {
+      return new Date() > new Date(planningTanggalSelesai)
+        ? "terlambat"
+        : "aman";
+    }
+    return "aman";
+  }
+
+  // No actual bar yet — if planning end has passed, it's terlambat
+  if (planningTanggalSelesai) {
+    return new Date() > new Date(planningTanggalSelesai) ? "terlambat" : "aman";
+  }
+
+  return "none";
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────────
 
-export default function MonitoringPage() {
+export default function MonitoringProgramPage() {
   const { slug, subSlug } = useParams() as {
     slug: string;
     subSlug: string;
@@ -90,7 +122,7 @@ export default function MonitoringPage() {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
       const json = await res.json();
@@ -113,10 +145,14 @@ export default function MonitoringPage() {
 
   const pengadaanList = program?.pengadaanList ?? [];
 
-  // Count status summaries across all tahapan
+  // Count status summaries across all tahapan (based on bar logic)
   const allTahapan = pengadaanList.flatMap((p) => p.tahapanList);
-  const totalAman = allTahapan.filter((t) => t.progres.status === "completed").length;
-  const totalKendala = allTahapan.filter((t) => t.progres.status === "late" || t.progres.status === "terlambat").length;
+  const totalAman = allTahapan.filter(
+    (t) => getTahapanBarStatus(t) === "aman",
+  ).length;
+  const totalKendala = allTahapan.filter(
+    (t) => getTahapanBarStatus(t) === "terlambat",
+  ).length;
 
   // Format budget
   const formatAnggaran = (val: string) => {
@@ -142,7 +178,10 @@ export default function MonitoringPage() {
         {/* ── Topbar ── */}
         <div className="flex justify-end items-center gap-4">
           <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            />
             <input
               type="text"
               placeholder="cari item"
@@ -152,10 +191,13 @@ export default function MonitoringPage() {
             />
           </div>
 
-          <button className="flex items-center gap-2 bg-[#CB0E0E] text-white hover:bg-red-900 px-4 py-2 rounded-lg transition-all">
+          <Link
+            href={`/monitoring-staff/${slug}/${subSlug}/arsip`}
+            className="flex items-center gap-2 bg-[#CB0E0E] text-white hover:bg-red-900 px-4 py-2 rounded-lg transition-all"
+          >
             <Upload size={16} />
             Arsip Digital Program
-          </button>
+          </Link>
         </div>
 
         {/* ── Summary Cards ── */}
@@ -164,7 +206,9 @@ export default function MonitoringPage() {
             <Building2 className="text-gray-500 shrink-0" />
             <div>
               <p className="text-xs text-gray-500">TOTAL PROYEK</p>
-              <p className="text-lg font-bold">{loading ? "—" : pengadaanList.length}</p>
+              <p className="text-lg font-bold">
+                {loading ? "—" : pengadaanList.length}
+              </p>
             </div>
           </div>
 
@@ -180,7 +224,9 @@ export default function MonitoringPage() {
             <AlertTriangle className="text-red-500 shrink-0" />
             <div>
               <p className="text-xs text-gray-500">Kendala</p>
-              <p className="text-lg font-bold">{loading ? "—" : totalKendala}</p>
+              <p className="text-lg font-bold">
+                {loading ? "—" : totalKendala}
+              </p>
             </div>
           </div>
 
@@ -201,7 +247,7 @@ export default function MonitoringPage() {
                     Memuat...
                   </span>
                 ) : (
-                  program?.namaProgram ?? "—"
+                  (program?.namaProgram ?? "—")
                 )}
               </h1>
               <p className="text-gray-500 text-sm mt-1">
@@ -246,6 +292,7 @@ export default function MonitoringPage() {
             <TimelineTable
               namaProgram={program?.namaProgram ?? ""}
               pengadaanList={pengadaanList}
+              filterStatus={filterStatus}
             />
           )}
         </div>

@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getCookie } from "cookies-next";
@@ -54,6 +55,9 @@ export default function ProgramPage() {
   const [namaProgram, setNamaProgram] = useState("");
   const [anggaran, setAnggaran] = useState("");
   const [metode, setMetode] = useState<number[]>([]);
+  const [keteranganMap, setKeteranganMap] = useState<Record<number, string>>(
+    {},
+  );
   const [submitting, setSubmitting] = useState(false);
 
   const params = useParams();
@@ -137,13 +141,18 @@ export default function ProgramPage() {
 
       const token = getCookie("accessToken");
 
-      const payload: CreateProgramPayload = {
+      const cleanAnggaran = anggaran.replace(/\./g, "");
+
+      const payload = {
         namaProgram,
-        anggaran: Number(anggaran.replace(/\./g, "")),
-        pengadaanIds: metode,
+        anggaran: Number(cleanAnggaran),
+        pengadaanList: metode.map((id) => ({
+          pengadaanId: id,
+          title: keteranganMap[id] || "",
+        })),
       };
 
-      const res = await fetch("https://sulsel.cloud/api/staff/program", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API}/staff/program`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -209,6 +218,18 @@ export default function ProgramPage() {
     }
 
     return `Rp ${value.toLocaleString("id-ID")}`;
+  };
+
+  const handleMetodeChange = (values: number[]) => {
+    setMetode(values);
+
+    setKeteranganMap((prev) => {
+      const updated: Record<number, string> = {};
+      values.forEach((id) => {
+        updated[id] = prev[id] || "";
+      });
+      return updated;
+    });
   };
 
   return (
@@ -279,7 +300,7 @@ export default function ProgramPage() {
                   href={`/monitoring-staff/${slug}/${subSlug}`}
                   className="block"
                 >
-                  <div className="relative bg-white rounded-3xl shadow-lg p-6 hover:shadow-xl transition border-t-16 border-[#CB0E0E] flex flex-col justify-between min-h-80 cursor-pointer hover:scale-[1.02] duration-200">
+                  <div className="relative bg-white rounded-3xl shadow-lg p-6 hover:shadow-xl transition border-t-16 border-[#CB0E0E] flex flex-col justify-between min-h-80 min-w-50 cursor-pointer hover:scale-[1.02] duration-200">
                     <div>
                       <div className="relative flex justify-between items-center mt-10 mb-6">
                         <div className="bg-[#CB0E0E] w-14 h-14 rounded-2xl flex items-center justify-center text-white text-2xl shadow">
@@ -292,7 +313,7 @@ export default function ProgramPage() {
                         </div>
                       </div>
 
-                      <h2 className="text-2xl font-bold leading-snug mb-2 wrap-break-word">
+                      <h2 className="text-2xl font-bold leading-snug mb-2 line-clamp-3">
                         {item.namaProgram}
                       </h2>
 
@@ -373,8 +394,51 @@ export default function ProgramPage() {
                 <MultiSelectMetode
                   options={metodeOptions}
                   selected={metode}
-                  onChange={setMetode}
+                  onChange={handleMetodeChange}
                 />
+
+                {/* === INPUT KETERANGAN PER METODE === */}
+                {[...metode]
+                  .sort((a, b) => a - b)
+                  .map((id) => {
+                    const item = metodeOptions.find((m) => m.id === id);
+
+                    return (
+                      <div
+                        key={id}
+                        className="mt-1 bg-gray-100 rounded-2xl p-2 shadow-inner"
+                      >
+                        <div className="flex justify-between items-start mb-3">
+                          <p className="text-red-600 font-semibold text-sm">
+                            {item?.label}
+                          </p>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleMetodeChange(metode.filter((m) => m !== id))
+                            }
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+
+                        <textarea
+                          placeholder="tambahkan keterangan"
+                          value={keteranganMap[id] || ""}
+                          onChange={(e) =>
+                            setKeteranganMap((prev) => ({
+                              ...prev,
+                              [id]: e.target.value,
+                            }))
+                          }
+                          className="w-full px-4 py-3 rounded-xl bg-gray-200 outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                          rows={1}
+                        />
+                      </div>
+                    );
+                  })}
               </div>
 
               {/* Buttons */}

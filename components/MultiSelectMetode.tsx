@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { X, ChevronDown, Check } from "lucide-react";
+import { ChevronDown, Check } from "lucide-react";
 
 type Option = {
   id: number;
@@ -43,10 +43,6 @@ export default function MultiSelectMetode({
     }
   };
 
-  const removeItem = (id: number) => {
-    onChange(selected.filter((item) => item !== id));
-  };
-
   return (
     <div className="relative space-y-3" ref={ref}>
       {/* Trigger */}
@@ -81,25 +77,6 @@ export default function MultiSelectMetode({
           })}
         </div>
       )}
-
-      {/* Selected Chips */}
-      <div className="flex flex-wrap gap-2">
-        {selected.map((id) => {
-          const item = options.find((opt) => opt.id === id);
-
-          return (
-            <div
-              key={id}
-              className="flex items-center gap-2 bg-red-100 text-[#CB0E0E] px-3 py-1 rounded-full text-sm"
-            >
-              {item?.label}
-              <button onClick={() => removeItem(id)}>
-                <X size={14} />
-              </button>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

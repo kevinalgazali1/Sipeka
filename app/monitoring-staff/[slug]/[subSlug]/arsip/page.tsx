@@ -1,14 +1,8 @@
 "use client";
 
 import { useState, useRef, DragEvent, ChangeEvent } from "react";
-import {
-  BookOpen,
-  X,
-  FileText,
-  Eye,
-  Download,
-  Upload
-} from "lucide-react";
+import { BookOpen, X, FileText, Eye, Download, Upload } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 /* ================= TYPES ================= */
 
@@ -28,6 +22,7 @@ export default function ArsipDigitalProgram() {
   const [dragOver, setDragOver] = useState<boolean>(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const router = useRouter();
 
   /* ================= HANDLERS ================= */
 
@@ -50,7 +45,6 @@ export default function ArsipDigitalProgram() {
       style={{ fontFamily: "'Segoe UI', sans-serif" }}
     >
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border-t-16 border-[#CB0E0E]">
-        
         {/* ================= HEADER ================= */}
         <div className="bg-white px-6 pt-6 pb-4 flex items-center justify-between border-b border-gray-100">
           <div className="flex items-center gap-10">
@@ -68,22 +62,26 @@ export default function ArsipDigitalProgram() {
             </div>
           </div>
 
-          <button className="w-8 h-8 rounded-full border-2 border-black flex items-center justify-center text-black hover:bg-gray-100 transition-colors">
+          <button
+            onClick={() => {
+              if (window.history.length > 1) {
+                router.back();
+              } else {
+                router.push("/monitoring-staff");
+              }
+            }}
+            className="w-8 h-8 rounded-full border-2 border-black flex items-center justify-center text-black hover:bg-gray-100 transition-colors cursor-pointer"
+          >
             <X className="w-4 h-4" strokeWidth={4} />
           </button>
         </div>
 
         {/* ================= BODY ================= */}
         <div className="p-6 grid grid-cols-2 gap-6 text-black">
-          
           {/* ================= LEFT: DOCUMENT LIST ================= */}
           <div>
-            <h2 className="text-sm font-bold mb-1">
-              Daftar Dokumen
-            </h2>
-            <p className="text-xs mb-4">
-              (Invoice/spk/lampiran)
-            </p>
+            <h2 className="text-sm font-bold mb-1">Daftar Dokumen</h2>
+            <p className="text-xs mb-4">(Invoice/spk/lampiran)</p>
 
             <div className="flex flex-col gap-3">
               {documents.map((doc) => (
@@ -92,13 +90,14 @@ export default function ArsipDigitalProgram() {
                   className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100 hover:border-red-200 hover:bg-red-50 transition-all group"
                 >
                   <div className="bg-red-100 rounded-lg w-9 h-9 flex items-center justify-center shrink-0">
-                    <FileText className="w-5 h-5 text-red-600" strokeWidth={2} />
+                    <FileText
+                      className="w-5 h-5 text-red-600"
+                      strokeWidth={2}
+                    />
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold uppercase">
-                      {doc.name}
-                    </p>
+                    <p className="text-xs font-bold uppercase">{doc.name}</p>
                     <p className="text-xs text-gray-400 truncate">
                       {doc.subtitle}
                     </p>
@@ -112,7 +111,6 @@ export default function ArsipDigitalProgram() {
                     <button className="text-gray-800 hover:text-green-500 transition-colors">
                       <Download className="w-4 h-4" strokeWidth={2} />
                     </button>
-
                   </div>
                 </div>
               ))}

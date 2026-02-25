@@ -1,6 +1,13 @@
 "use client";
 
-import { LayoutDashboard, FileText, BookOpen, Building2, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  LayoutDashboard,
+  FileText,
+  BookOpen,
+  Building2,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -18,6 +25,7 @@ interface Pengadaan {
   id: number;
   namaTransaksi: string;
   jenisPengadaan: string;
+  title: string;
   tahapanList: Tahapan[];
 }
 
@@ -27,9 +35,15 @@ interface SidebarProps {
   onTabChange?: (tab: string) => void;
 }
 
-export default function Sidebar({ pengadaanList = [], activeTab, onTabChange }: SidebarProps) {
+export default function Sidebar({
+  pengadaanList = [],
+  activeTab,
+  onTabChange,
+}: SidebarProps) {
   const router = useRouter();
-  const [openDropdowns, setOpenDropdowns] = useState<Record<number, boolean>>({});
+  const [openDropdowns, setOpenDropdowns] = useState<Record<number, boolean>>(
+    {},
+  );
 
   const toggleDropdown = (id: number) => {
     setOpenDropdowns((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -68,9 +82,12 @@ export default function Sidebar({ pengadaanList = [], activeTab, onTabChange }: 
                     : "bg-[#CB0E0E]/10 text-[#CB0E0E] hover:bg-[#CB0E0E]/20"
                 }`}
               >
-                <div className="flex items-center gap-2 truncate">
-                  <FileText size={15} className="shrink-0" />
-                  <span className="truncate">{pengadaan.jenisPengadaan}</span>
+                <div className="flex items-center gap-1 truncate">
+                  <FileText size={20} className="shrink-0" />
+                  <div className="flex flex-col text-start">
+                    <span className="truncate font-semibold">{pengadaan.jenisPengadaan}</span>
+                    <span className="text-xs">{pengadaan.title}</span>
+                  </div>
                 </div>
                 {openDropdowns[pengadaan.id] ? (
                   <ChevronDown size={14} className="shrink-0" />
@@ -85,7 +102,9 @@ export default function Sidebar({ pengadaanList = [], activeTab, onTabChange }: 
                   {pengadaan.tahapanList.map((tahapan) => (
                     <button
                       key={tahapan.idTahapan}
-                      onClick={() => onTabChange?.(`${pengadaan.id}-${tahapan.idTahapan}`)}
+                      onClick={() =>
+                        onTabChange?.(`${pengadaan.id}-${tahapan.idTahapan}`)
+                      }
                       className={`flex items-center gap-2 w-full px-3 py-1.5 rounded-md text-xs transition-colors text-left ${
                         activeTab === `${pengadaan.id}-${tahapan.idTahapan}`
                           ? "bg-red-50 text-[#CB0E0E] font-semibold"
