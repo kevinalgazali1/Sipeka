@@ -36,7 +36,7 @@ export default function ArsipDigitalProgram() {
       const token = getCookie("accessToken");
 
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_API}/staff/program/${subSlug}/dokumen`,
+        `${process.env.NEXT_PUBLIC_BACKEND_API}/gubernur/program/${subSlug}/dokumen`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -71,77 +71,6 @@ export default function ArsipDigitalProgram() {
     const file = e.dataTransfer.files?.[0];
     if (file) setUploadedFile(file);
   };
-
-  const handleUpload = async () => {
-    if (!uploadedFile) return;
-
-    const loadingToast = toast.loading("Mengupload dokumen...");
-
-    try {
-      setUploading(true);
-
-      const token = getCookie("accessToken");
-
-      const formData = new FormData();
-      formData.append("dokumen", uploadedFile);
-
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_API}/staff/program/${subSlug}/dokumen`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        },
-      );
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("SERVER ERROR:", errorText);
-        throw new Error(errorText);
-      }
-
-      const json = await res.json();
-
-      setDocuments((prev) => [...json.data, ...prev]);
-
-      toast.dismiss(loadingToast);
-      toast.success("Dokumen berhasil diupload");
-    } catch (err) {
-      toast.dismiss(loadingToast);
-      toast.error("Upload gagal, coba lagi");
-      console.error("Upload error:", err);
-    } finally {
-      setUploading(false);
-
-      // ✅ Reset state
-      setUploadedFile(null);
-
-      // ✅ Reset input file DOM
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  };
-
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Maksimal ukuran file 5MB");
-      return;
-    }
-
-    setUploadedFile(file);
-  };
-
-  useEffect(() => {
-    if (uploadedFile) {
-      handleUpload();
-    }
-  }, [uploadedFile]);
 
   const handleDownload = async (fileUrl: string, fileName: string) => {
     const extension = fileName
@@ -209,7 +138,7 @@ export default function ArsipDigitalProgram() {
         </div>
 
         {/* ================= BODY ================= */}
-        <div className="p-6 grid grid-cols-2 gap-6 text-black max-h-75 h-full items-start">
+        <div className="p-6 flex gap-6 text-black max-h-75 h-full items-start">
           {/* ================= LEFT: DOCUMENT LIST ================= */}
           <div className="flex flex-col overflow-hidden max-h-65">
             <h2 className="text-sm font-bold mb-1">Daftar Dokumen</h2>
@@ -221,7 +150,7 @@ export default function ArsipDigitalProgram() {
                 Belum ada dokumen diupload
               </p>
             ) : (
-              <div className="flex flex-col flex-1 overflow-y-auto pr-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 overflow-y-auto pr-2">
                 {documents.map((doc) => (
                   <div
                     key={doc.id}
@@ -264,51 +193,6 @@ export default function ArsipDigitalProgram() {
             )}
           </div>
 
-          {/* ================= RIGHT: UPLOAD AREA ================= */}
-          <div className="flex flex-col items-center justify-center self-center w-full">
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`w-full rounded-2xl border-2 border-dashed flex flex-col items-center justify-center p-8 cursor-pointer transition-all
-              ${
-                dragOver
-                  ? "border-red-500 bg-red-50"
-                  : "border-gray-300 bg-gray-50 hover:border-red-400 hover:bg-red-50"
-              }`}
-              style={{ minHeight: 160 }}
-            >
-              <div className="bg-gray-200 rounded-full w-12 h-12 flex items-center justify-center mb-3">
-                <Upload className="w-6 h-6 text-gray-500" />
-              </div>
-
-              <p className="text-sm font-bold uppercase">Upload File</p>
-
-              <p className="text-xs text-gray-400 text-center mt-1">
-                {uploading
-                  ? "Mengupload..."
-                  : uploadedFile
-                    ? uploadedFile.name
-                    : "Pilih PDF atau Foto Dokumen"}
-              </p>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-            </div>
-
-            <p className="text-xs text-gray-400 mt-3 text-center">
-              Mendukung PDF, JPG, PNG, Doc
-            </p>
-          </div>
         </div>
       </div>
     </div>

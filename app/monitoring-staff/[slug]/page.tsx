@@ -45,6 +45,12 @@ interface CreateProgramResponse {
 }
 
 export default function ProgramPage() {
+  type SelectedMetode = {
+    key: string;
+    pengadaanId: number;
+    title: string;
+  };
+
   const [open, setOpen] = useState(false);
   const [metodeOptions, setMetodeOptions] = useState<MetodePengadaanOption[]>(
     [],
@@ -53,7 +59,7 @@ export default function ProgramPage() {
   const [loading, setLoading] = useState(true);
   const [namaProgram, setNamaProgram] = useState("");
   const [anggaran, setAnggaran] = useState("");
-  const [metode, setMetode] = useState<number[]>([]);
+  const [metode, setMetode] = useState<SelectedMetode[]>([]);
   const [keteranganMap, setKeteranganMap] = useState<Record<number, string>>(
     {},
   );
@@ -146,9 +152,9 @@ export default function ProgramPage() {
       const payload = {
         namaProgram,
         anggaran: Number(cleanAnggaran),
-        pengadaanList: metode.map((id) => ({
-          pengadaanId: id,
-          title: keteranganMap[id] || "",
+        pengadaanList: metode.map((m) => ({
+          pengadaanId: m.pengadaanId,
+          title: m.title,
         })),
       };
 
@@ -223,16 +229,15 @@ export default function ProgramPage() {
     return `Rp ${value.toLocaleString("id-ID")}`;
   };
 
-  const handleMetodeChange = (values: number[]) => {
-    setMetode(values);
-
-    setKeteranganMap((prev) => {
-      const updated: Record<number, string> = {};
-      values.forEach((id) => {
-        updated[id] = prev[id] || "";
-      });
-      return updated;
-    });
+  const handleMetodeChange = (id: number) => {
+    setMetode((prev) => [
+      ...prev,
+      {
+        key: crypto.randomUUID(), // unik
+        pengadaanId: id,
+        title: "",
+      },
+    ]);
   };
 
   const filteredProgram = programList.filter((item) =>
@@ -261,7 +266,7 @@ export default function ProgramPage() {
 
           <button
             onClick={() => setOpen(true)}
-            className="flex items-center gap-2 bg-[#CB0E0E] hover:bg-red-800 text-white px-4 py-2 rounded-lg shadow transition"
+            className="flex items-center gap-2 bg-[#CB0E0E] hover:bg-red-800 text-white px-4 py-2 cursor-pointer rounded-lg shadow transition"
           >
             <Plus size={16} />
             Tambah
@@ -289,14 +294,14 @@ export default function ProgramPage() {
         {/* ================= BACK BUTTON ================= */}
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow hover:bg-gray-100 transition mb-10"
+          className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow hover:bg-gray-100 transition mb-10 cursor-pointer"
         >
           <ArrowLeft size={16} />
           Kembali
         </button>
 
         {/* ================= PROGRAM CARD ================= */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-10 text-black">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-6 text-black items-stretch">
           {loading && <p>Loading...</p>}
 
           {!loading && filteredProgram.length === 0 && (
@@ -316,7 +321,7 @@ export default function ProgramPage() {
                   href={`/monitoring-staff/${slug}/${subSlug}`}
                   className="block"
                 >
-                  <div className="relative bg-white rounded-3xl shadow-lg p-6 hover:shadow-xl transition border-t-16 border-[#CB0E0E] flex flex-col justify-between min-h-80 min-w-50 cursor-pointer hover:scale-[1.02] duration-200">
+                  <div className="relative bg-white rounded-3xl shadow-lg p-4 hover:shadow-xl transition border-t-16 border-[#CB0E0E] flex flex-col h-full cursor-pointer hover:scale-[1.02] duration-200">
                     <div>
                       <div className="relative flex justify-between items-center mt-10 mb-6">
                         <div className="bg-[#CB0E0E] w-14 h-14 rounded-2xl flex items-center justify-center text-white text-2xl shadow">
@@ -414,47 +419,52 @@ export default function ProgramPage() {
                 />
 
                 {/* === INPUT KETERANGAN PER METODE === */}
-                {[...metode]
-                  .sort((a, b) => a - b)
-                  .map((id) => {
-                    const item = metodeOptions.find((m) => m.id === id);
+                {metode.map((item) => {
+                  const metodeData = metodeOptions.find(
+                    (m) => m.id === item.pengadaanId,
+                  );
 
-                    return (
-                      <div
-                        key={id}
-                        className="mt-1 bg-gray-100 rounded-2xl p-2 shadow-inner"
-                      >
-                        <div className="flex justify-between items-start mb-3">
-                          <p className="text-red-600 font-semibold text-sm">
-                            {item?.label}
-                          </p>
+                  return (
+                    <div
+                      key={item.key}
+                      className="mt-1 bg-gray-100 rounded-2xl p-2 shadow-inner"
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <p className="text-red-600 font-semibold text-sm">
+                          {metodeData?.label}
+                        </p>
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleMetodeChange(metode.filter((m) => m !== id))
-                            }
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <X size={16} />
-                          </button>
-                        </div>
-
-                        <textarea
-                          placeholder="tambahkan keterangan"
-                          value={keteranganMap[id] || ""}
-                          onChange={(e) =>
-                            setKeteranganMap((prev) => ({
-                              ...prev,
-                              [id]: e.target.value,
-                            }))
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMetode((prev) =>
+                              prev.filter((m) => m.key !== item.key),
+                            )
                           }
-                          className="w-full px-4 py-3 rounded-xl bg-gray-200 outline-none focus:ring-2 focus:ring-red-500 resize-none"
-                          rows={1}
-                        />
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
-                    );
-                  })}
+
+                      <textarea
+                        placeholder="tambahkan keterangan"
+                        value={item.title}
+                        onChange={(e) =>
+                          setMetode((prev) =>
+                            prev.map((m) =>
+                              m.key === item.key
+                                ? { ...m, title: e.target.value }
+                                : m,
+                            ),
+                          )
+                        }
+                        className="w-full px-4 py-3 rounded-xl bg-gray-200 outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                        rows={1}
+                      />
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Buttons */}

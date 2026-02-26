@@ -22,6 +22,9 @@ export default function InstansiPage() {
   const [instansiList, setInstansiList] = useState<DinasItem[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const [user, setUser] = useState<{ username: string; role: string } | null>(
+    null,
+  );
 
   const fetchInstansi = async () => {
     try {
@@ -40,7 +43,10 @@ export default function InstansiPage() {
 
       if (json?.data) {
         setInstansiList(json.data);
-        console.log(json.data);
+      }
+
+      if (json?.user) {
+        setUser(json.user);
       }
     } catch (err) {
       console.error("Error fetch dinas:", err);
@@ -110,15 +116,15 @@ export default function InstansiPage() {
               <UserCircle2 size={24} color="green" />
               <div>
                 <p className="text-sm font-semibold text-black">
-                  DR. AHMAD TRIA
+                  {user?.username ?? "Loading..."}
                 </p>
-                <p className="text-xs text-black">Staff</p>
+                <p className="text-xs text-black">{user?.role ?? ""}</p>
               </div>
             </div>
 
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 text-sm bg-[#CB0E0E] text-white px-4 py-2 rounded-lg shadow hover:bg-red-800 transition"
+              className="flex items-center gap-2 text-sm bg-[#CB0E0E] text-white px-4 py-2 cursor-pointer rounded-lg shadow hover:bg-red-800 transition"
             >
               <LogOut size={16} />
               Logout

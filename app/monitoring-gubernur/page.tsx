@@ -18,11 +18,13 @@ interface DinasItem {
   programPrioritas: number;
 }
 
-export default function GubernurPage() {
+export default function GubernurInstansiPage() {
   const [instansiList, setInstansiList] = useState<DinasItem[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const [searchTerm, setSearchTerm] = useState("");
+  const [user, setUser] = useState<{ username: string; role: string } | null>(
+    null,
+  );
 
   const fetchInstansi = async () => {
     try {
@@ -41,7 +43,10 @@ export default function GubernurPage() {
 
       if (json?.data) {
         setInstansiList(json.data);
-        console.log(json.data);
+      }
+
+      if (json?.user) {
+        setUser(json.user);
       }
     } catch (err) {
       console.error("Error fetch dinas:", err);
@@ -86,10 +91,6 @@ export default function GubernurPage() {
     }
   };
 
-  const filteredInstansi = instansiList.filter((item) =>
-    item.namaDinas.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
-
   return (
     <section className="min-h-screen bg-[#2d0000]">
       <div className="bg-[#ececec] min-h-screen py-10 px-32">
@@ -115,15 +116,15 @@ export default function GubernurPage() {
               <UserCircle2 size={24} color="green" />
               <div>
                 <p className="text-sm font-semibold text-black">
-                  DR. AHMAD TRIA
+                  {user?.username ?? "Loading..."}
                 </p>
-                <p className="text-xs text-black">Staff</p>
+                <p className="text-xs text-black">{user?.role ?? ""}</p>
               </div>
             </div>
 
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 text-sm bg-[#CB0E0E] text-white px-4 py-2 rounded-lg shadow hover:bg-red-800 transition"
+              className="flex items-center gap-2 text-sm bg-[#CB0E0E] text-white px-4 py-2 cursor-pointer rounded-lg shadow hover:bg-red-800 transition"
             >
               <LogOut size={16} />
               Logout
@@ -133,33 +134,12 @@ export default function GubernurPage() {
 
         <hr className="mb-8 border-gray-300" />
 
-        {/* ================= SEARCH ================= */}
-        <div className="flex justify-end mb-10">
-          <div className="relative w-64">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <input
-              type="text"
-              placeholder="Cari dinas..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-lg border text-black placeholder:text-gray-400 border-gray-300 bg-white focus:ring-2 focus:ring-red-500 outline-none"
-            />
-          </div>
-        </div>
-
         {/* ================= CARD GRID ================= */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-10 text-black">
-          {loading ? (
-            <p>Loading...</p>
-          ) : filteredInstansi.length === 0 ? (
-            <p className="text-gray-500 col-span-full text-center">
-              Dinas tidak ditemukan
-            </p>
-          ) : (
-            filteredInstansi.map((item) => (
+          {loading && <p>Loading...</p>}
+
+          {!loading &&
+            instansiList.map((item) => (
               <div
                 key={item.id}
                 onClick={() => handleMasukInstansi(item.namaDinas)}
@@ -195,8 +175,7 @@ export default function GubernurPage() {
                   </div>
                 </div>
               </div>
-            ))
-          )}
+            ))}
         </div>
       </div>
     </section>

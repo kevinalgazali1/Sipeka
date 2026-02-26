@@ -112,7 +112,7 @@ export default function MonitoringProgramPage() {
     try {
       const token = getCookie("accessToken");
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_API}/staff/program/${subSlug}`,
+        `${process.env.NEXT_PUBLIC_BACKEND_API}/gubernur/program/${subSlug}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       const json = await res.json();
@@ -245,7 +245,7 @@ export default function MonitoringProgramPage() {
           </div>
 
           <Link
-            href={`/monitoring-staff/${slug}/${subSlug}/arsip`}
+            href={`/monitoring-gubernur/${slug}/${subSlug}/arsip`}
             className="flex items-center gap-2 bg-[#CB0E0E] text-white hover:bg-red-900 px-4 py-2 rounded-lg transition-all"
           >
             <Upload size={16} />

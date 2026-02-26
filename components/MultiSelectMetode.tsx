@@ -11,8 +11,8 @@ type Option = {
 
 type Props = {
   options: Option[];
-  selected: number[];
-  onChange: (values: number[]) => void;
+  selected: { pengadaanId: number }[];
+  onChange: (id: number) => void;
 };
 
 export default function MultiSelectMetode({
@@ -35,12 +35,8 @@ export default function MultiSelectMetode({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const toggleSelect = (id: number) => {
-    if (selected.includes(id)) {
-      onChange(selected.filter((item) => item !== id));
-    } else {
-      onChange([...selected, id]);
-    }
+  const addSelect = (id: number) => {
+    onChange(id);
   };
 
   return (
@@ -62,16 +58,26 @@ export default function MultiSelectMetode({
       {open && (
         <div className="absolute bottom-full mb-2 w-full bg-white border rounded-lg shadow-lg max-h-60 overflow-auto z-50">
           {options.map((item) => {
-            const isSelected = selected.includes(item.id);
+            const count = selected.filter(
+              (s) => s.pengadaanId === item.id,
+            ).length;
 
             return (
               <div
                 key={item.id}
-                onClick={() => toggleSelect(item.id)}
+                onClick={() => addSelect(item.id)}
                 className="px-4 py-2 hover:bg-red-50 cursor-pointer flex justify-between items-center"
               >
                 <span>{item.label}</span>
-                {isSelected && <Check size={16} className="text-red-600" />}
+
+                {count > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
+                      {count}
+                    </span>
+                    <Check size={16} className="text-red-600" />
+                  </div>
+                )}
               </div>
             );
           })}

@@ -1,10 +1,26 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { X, Save, Upload } from "lucide-react";
 import { getCookie } from "cookies-next";
 import toast from "react-hot-toast";
+
+/** Decode JWT payload tanpa library eksternal */
+function decodeJwtPayload(token: string): Record<string, any> | null {
+  try {
+    const base64 = token.split(".")[1];
+    if (!base64) return null;
+    // Tambahkan padding jika perlu
+    const padded = base64.replace(/-/g, "+").replace(/_/g, "/").padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4),
+      "=",
+    );
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
 
 interface Progres {
   idProgres: number;
@@ -38,6 +54,13 @@ interface TimelineTableProps {
   namaProgram?: string;
   pengadaanList?: Pengadaan[];
   filterStatus?: string; // "semua" | "aman" | "terlambat"
+  /**
+   * activeTab dari Sidebar:
+   *  - "semua"                        → tampilkan semua
+   *  - "pengadaan-{id}"               → tampilkan semua tahapan dalam pengadaan tsb
+   *  - "tahapan-{pengId}-{tahId}"     → tampilkan 1 tahapan spesifik
+   */
+  activeTab?: string;
 }
 
 function getTahapanBarStatus(tahapan: Tahapan): "aman" | "terlambat" | "none" {
@@ -45,13 +68,11 @@ function getTahapanBarStatus(tahapan: Tahapan): "aman" | "terlambat" | "none" {
     tahapan.progres;
 
   if (aktualTanggalMulai) {
-    // Actual bar exists — compare finish dates
     if (aktualTanggalSelesai && planningTanggalSelesai) {
       return new Date(aktualTanggalSelesai) <= new Date(planningTanggalSelesai)
         ? "aman"
         : "terlambat";
     }
-    // Actual started but unfinished — check if planning deadline passed
     if (planningTanggalSelesai) {
       return new Date() > new Date(planningTanggalSelesai)
         ? "terlambat"
@@ -60,7 +81,6 @@ function getTahapanBarStatus(tahapan: Tahapan): "aman" | "terlambat" | "none" {
     return "aman";
   }
 
-  // No actual bar — is planning deadline overdue?
   if (planningTanggalSelesai) {
     return new Date() > new Date(planningTanggalSelesai) ? "terlambat" : "aman";
   }
@@ -112,18 +132,8 @@ function buildTimelineColumns(pengadaanList: Pengadaan[]) {
     const year = cursor.getFullYear();
     const monthIndex = cursor.getMonth();
     const monthNames = [
-      "Januari",
-      "Februari",
-      "Maret",
-      "April",
-      "Mei",
-      "Juni",
-      "Juli",
-      "Agustus",
-      "September",
-      "Oktober",
-      "November",
-      "Desember",
+      "Januari","Februari","Maret","April","Mei","Juni",
+      "Juli","Agustus","September","Oktober","November","Desember",
     ];
     const monthName = monthNames[monthIndex];
     const dayOfMonth = cursor.getDate();
@@ -264,9 +274,9 @@ function DateSelectors({
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex gap-4">
       {[
-        { label: "MULAI", value: mulai, onChange: onMulai },
-        { label: "SELESAI", value: selesai, onChange: onSelesai },
-      ].map(({ label, value, onChange }) => (
+        { label: "MULAI", value: mulai, onChange: onMulai, isSelesai: false },
+        { label: "SELESAI", value: selesai, onChange: onSelesai, isSelesai: true },
+      ].map(({ label, value, onChange, isSelesai }) => (
         <div key={label} className="flex-1">
           <label className="block text-xs font-semibold text-gray-500 mb-1.5 tracking-wider">
             {label}
@@ -275,7 +285,9 @@ function DateSelectors({
             type="date"
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400"
+            min={isSelesai ? mulai : undefined}
+            disabled={isSelesai && !mulai}
+            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400 disabled:bg-gray-200 disabled:cursor-not-allowed"
           />
         </div>
       ))}
@@ -283,45 +295,25 @@ function DateSelectors({
   );
 }
 
-function PlanModal({
-  tahapan,
-  onClose,
-}: {
-  tahapan: Tahapan;
-  onClose: () => void;
-}) {
-  const [mulai, setMulai] = useState(
-    formatDateForInput(tahapan.progres.planningTanggalMulai),
-  );
-  const [selesai, setSelesai] = useState(
-    formatDateForInput(tahapan.progres.planningTanggalSelesai),
-  );
+function PlanModal({ tahapan, onClose }: { tahapan: Tahapan; onClose: () => void }) {
+  const [mulai, setMulai] = useState(formatDateForInput(tahapan.progres.planningTanggalMulai));
+  const [selesai, setSelesai] = useState(formatDateForInput(tahapan.progres.planningTanggalSelesai));
   const [loading, setLoading] = useState(false);
 
   async function handleSave() {
-    if (!mulai || !selesai) {
-      toast.error("Tanggal mulai dan selesai wajib diisi");
-      return;
-    }
+    if (!mulai || !selesai) { toast.error("Tanggal mulai dan selesai wajib diisi"); return; }
+    if (new Date(selesai) < new Date(mulai)) { toast.error("Tanggal selesai tidak boleh sebelum tanggal mulai"); return; }
 
     try {
       setLoading(true);
-
       const token = getCookie("accessToken");
-
-      if (!token) {
-        toast.error("Session habis, silakan login ulang");
-        return;
-      }
+      if (!token) { toast.error("Session habis, silakan login ulang"); return; }
 
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_API}/staff/progres/${tahapan.progres.idProgres}/planning`,
         {
           method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({
             planningTanggalMulai: formatToMMDDYYYY(mulai),
             planningTanggalSelesai: formatToMMDDYYYY(selesai),
@@ -330,15 +322,9 @@ function PlanModal({
       );
 
       const result = await res.json();
-
-      if (!res.ok) {
-        throw new Error(result?.msg || "Gagal update planning");
-      }
-
+      if (!res.ok) throw new Error(result?.msg || "Gagal update planning");
       toast.success(result.msg || "Berhasil mengatur ulang jadwal planning");
-
       onClose();
-
       window.location.reload();
     } catch (err: any) {
       console.error(err);
@@ -352,31 +338,13 @@ function PlanModal({
     <ModalShell onClose={onClose}>
       <div className="px-7 pt-6 pb-7">
         <ModalHeader subtitle={tahapan.namaTahapan} onClose={onClose} />
-
         <p className="text-sm font-semibold text-gray-800 mb-3">
           Target Waktu <span className="italic font-normal">(planning)</span>
         </p>
-
-        <DateSelectors
-          mulai={mulai}
-          selesai={selesai}
-          onMulai={setMulai}
-          onSelesai={setSelesai}
-        />
-
+        <DateSelectors mulai={mulai} selesai={selesai} onMulai={setMulai} onSelesai={setSelesai} />
         <div className="flex gap-3 mt-6">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200"
-          >
-            BATALKAN
-          </button>
-
-          <button
-            onClick={handleSave}
-            disabled={loading}
-            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-green-500 hover:bg-green-600 flex items-center justify-center gap-2"
-          >
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200">BATALKAN</button>
+          <button onClick={handleSave} disabled={loading} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-green-500 hover:bg-green-600 flex items-center justify-center gap-2">
             <Save size={15} />
             {loading ? "MENYIMPAN..." : "SIMPAN DATA"}
           </button>
@@ -386,75 +354,42 @@ function PlanModal({
   );
 }
 
-function UpdateModal({
-  tahapan,
-  onClose,
-}: {
-  tahapan: Tahapan;
-  onClose: () => void;
-}) {
-  const [mulai, setMulai] = useState(
-    formatDateForInput(tahapan.progres.aktualTanggalMulai),
-  );
-  const [selesai, setSelesai] = useState(
-    formatDateForInput(tahapan.progres.aktualTanggalSelesai),
-  );
+function UpdateModal({ tahapan, onClose }: { tahapan: Tahapan; onClose: () => void }) {
+  const [selesai, setSelesai] = useState(formatDateForInput(tahapan.progres.aktualTanggalSelesai));
   const [fileName, setFileName] = useState<string | null>(null);
-  const [keterangan, setKeterangan] = useState(
-    tahapan.progres.keterangan ?? "",
-  );
+  const [keterangan, setKeterangan] = useState(tahapan.progres.keterangan ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const planningSelesai = tahapan.progres.planningTanggalSelesai;
+  const isTerlambat = selesai && planningSelesai && new Date(selesai) > new Date(formatDateForInput(planningSelesai));
+  const planningMulai = tahapan.progres.planningTanggalMulai ? formatDateForInput(tahapan.progres.planningTanggalMulai) : "";
 
   async function handleSave() {
-    if (!mulai || !selesai || !keterangan) {
-      toast.error("Semua field wajib diisi");
-      return;
-    }
+    if (!selesai) { toast.error("Tanggal selesai wajib diisi"); return; }
+    if (isTerlambat && !keterangan.trim()) { toast.error("Keterangan wajib diisi karena melewati planning"); return; }
 
     try {
       setLoading(true);
       const loadingToast = toast.loading("Menyimpan data aktual...");
-
       const token = getCookie("accessToken");
-
-      if (!token) {
-        toast.dismiss(loadingToast);
-        toast.error("Session habis, silakan login ulang");
-        return;
-      }
+      if (!token) { toast.dismiss(loadingToast); toast.error("Session habis, silakan login ulang"); return; }
 
       const formData = new FormData();
-      formData.append("aktualTanggalMulai", formatToMMDDYYYY(mulai));
+      formData.append("aktualTanggalMulai", formatToMMDDYYYY(formatDateForInput(tahapan.progres.planningTanggalMulai)));
       formData.append("aktualTanggalSelesai", formatToMMDDYYYY(selesai));
-      formData.append("keterangan", keterangan);
-
-      if (selectedFile) {
-        formData.append("dokumen", selectedFile);
-      }
+      if (keterangan.trim()) formData.append("keterangan", keterangan);
+      if (selectedFile) formData.append("dokumen", selectedFile);
 
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_API}/staff/progres/${tahapan.progres.idProgres}/aktual`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        },
+        { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: formData },
       );
 
       const result = await res.json();
-
       toast.dismiss(loadingToast);
-
-      if (!res.ok) {
-        throw new Error(result?.msg || "Gagal menyimpan aktual");
-      }
-
+      if (!res.ok) throw new Error(result?.msg || "Gagal menyimpan aktual");
       toast.success(result.msg || "Berhasil menyimpan data aktual");
-
       onClose();
       window.location.reload();
     } catch (err: any) {
@@ -470,15 +405,23 @@ function UpdateModal({
       <div className="px-7 pt-6 pb-7">
         <ModalHeader subtitle={tahapan.namaTahapan} onClose={onClose} />
         <p className="text-sm font-semibold text-gray-800 mb-3">
-          Realisasi Lapangan{" "}
-          <span className="italic font-normal">(actual)</span>
+          Realisasi Lapangan <span className="italic font-normal">(actual)</span>
         </p>
-        <DateSelectors
-          mulai={mulai}
-          selesai={selesai}
-          onMulai={setMulai}
-          onSelesai={setSelesai}
-        />
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Tanggal Selesai Aktual</label>
+            <input
+              type="date"
+              value={selesai}
+              min={planningMulai}
+              disabled={!planningMulai}
+              onChange={(e) => setSelesai(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-400 disabled:bg-gray-200 disabled:cursor-not-allowed"
+            />
+            {!planningMulai && <p className="text-xs text-red-500 mt-1">Planning mulai belum diatur</p>}
+          </div>
+        </div>
 
         <div className="mt-4 bg-gray-50 border border-gray-200 rounded-xl p-4">
           <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -486,57 +429,24 @@ function UpdateModal({
             Unggah Dokumen Pendukung (PDF)
           </p>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="px-3 py-1.5 text-xs font-semibold border-2 border-red-400 text-red-500 rounded-full hover:bg-red-50 transition-colors whitespace-nowrap"
-            >
+            <button onClick={() => fileRef.current?.click()} className="px-3 py-1.5 text-xs font-semibold border-2 border-red-400 text-red-500 rounded-full hover:bg-red-50 transition-colors whitespace-nowrap">
               Choose File
             </button>
-            <span className="text-sm text-gray-500 truncate">
-              {fileName ?? "Belum ada file dipilih"}
-            </span>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  setSelectedFile(file);
-                  setFileName(file.name);
-                }
-              }}
-            />
+            <span className="text-sm text-gray-500 truncate">{fileName ?? "Belum ada file dipilih"}</span>
+            <input ref={fileRef} type="file" accept=".pdf" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) { setSelectedFile(file); setFileName(file.name); } }} />
           </div>
         </div>
 
-        <div className="mt-4">
-          <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-            Keterangan :
-          </label>
-          <textarea
-            value={keterangan}
-            onChange={(e) => setKeterangan(e.target.value)}
-            placeholder="Tuliskan keterangan di sini..."
-            rows={3}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-gray-50 resize-none focus:outline-none focus:ring-2 focus:ring-green-400 placeholder:text-gray-400"
-          />
-        </div>
+        {isTerlambat && (
+          <div className="mt-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Keterangan (Wajib karena melewati planning)</label>
+            <textarea value={keterangan} onChange={(e) => setKeterangan(e.target.value)} placeholder="Jelaskan alasan keterlambatan..." rows={3} className="w-full border border-red-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-red-50 resize-none focus:outline-none focus:ring-2 focus:ring-red-400 placeholder:text-gray-400" />
+          </div>
+        )}
 
         <div className="flex gap-3 mt-6">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200"
-          >
-            BATALKAN
-          </button>
-
-          <button
-            onClick={handleSave}
-            disabled={loading}
-            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-green-500 hover:bg-green-600 flex items-center justify-center gap-2"
-          >
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200">BATALKAN</button>
+          <button onClick={handleSave} disabled={loading} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-green-500 hover:bg-green-600 flex items-center justify-center gap-2">
             <Save size={15} />
             {loading ? "MENYIMPAN..." : "SIMPAN DATA"}
           </button>
@@ -547,54 +457,69 @@ function UpdateModal({
 }
 
 // ─── Main Component ─────────────────────────────────────────────────────────────
+
 type ModalType = "plan" | "update";
 
 async function handleOpenPDF(dokumenBukti: any[]) {
-  if (!dokumenBukti || dokumenBukti.length === 0) {
-    toast.error("Dokumen belum tersedia");
-    return;
-  }
-
+  if (!dokumenBukti || dokumenBukti.length === 0) { toast.error("Dokumen belum tersedia"); return; }
   const token = getCookie("accessToken");
-  if (!token) {
-    toast.error("Session habis, silakan login ulang");
-    return;
-  }
-
+  if (!token) { toast.error("Session habis, silakan login ulang"); return; }
   const fileUrl = dokumenBukti[0].fileUrl;
-  const fullUrl = `https://sulsel.cloud${fileUrl}`;
-
-  window.open(fullUrl, "_blank");
+  window.open(`https://sulsel.cloud${fileUrl}`, "_blank");
 }
 
 export default function TimelineTable({
   namaProgram = "Program",
   pengadaanList = [],
   filterStatus = "semua",
+  activeTab = "semua",
 }: TimelineTableProps) {
-  const [modal, setModal] = useState<{
-    type: ModalType;
-    tahapan: Tahapan;
-  } | null>(null);
+  const [modal, setModal] = useState<{ type: ModalType; tahapan: Tahapan } | null>(null);
 
-  // ─── Filter pengadaanList based on filterStatus ─────────────────────────────
+  // ─── Decode JWT → ambil role (computed langsung, tanpa useEffect) ────────────
+  const isStaff = (() => {
+    const token = getCookie("accessToken");
+    if (!token || typeof token !== "string") return false;
+    const payload = decodeJwtPayload(token);
+    const role: string =
+      payload?.role ?? payload?.roles ?? payload?.user?.role ?? "";
+    return role.toLowerCase() === "staff";
+  })();
+
+  // ─── Step 1: Filter by sidebar activeTab ────────────────────────────────────
+  let tabFilteredList = pengadaanList;
+
+  if (activeTab.startsWith("pengadaan-")) {
+    const pengId = parseInt(activeTab.replace("pengadaan-", ""), 10);
+    tabFilteredList = pengadaanList.filter((p) => p.id === pengId);
+  } else if (activeTab.startsWith("tahapan-")) {
+    const parts = activeTab.split("-"); // ["tahapan", pengId, tahId]
+    const pengId = parseInt(parts[1], 10);
+    const tahId = parseInt(parts[2], 10);
+    tabFilteredList = pengadaanList
+      .filter((p) => p.id === pengId)
+      .map((p) => ({
+        ...p,
+        tahapanList: p.tahapanList.filter((t) => t.idTahapan === tahId),
+      }))
+      .filter((p) => p.tahapanList.length > 0);
+  }
+
+  // ─── Step 2: Filter by status (aman / terlambat) ────────────────────────────
   const filteredPengadaanList =
     filterStatus === "semua"
-      ? pengadaanList
-      : pengadaanList
+      ? tabFilteredList
+      : tabFilteredList
           .map((pengadaan) => ({
             ...pengadaan,
             tahapanList: pengadaan.tahapanList.filter(
               (tahapan) => getTahapanBarStatus(tahapan) === filterStatus,
             ),
           }))
-          // Remove pengadaan groups that have no matching tahapan
           .filter((pengadaan) => pengadaan.tahapanList.length > 0);
 
-  const columns = buildTimelineColumns(
-    // Use full list to keep column range stable regardless of active filter
-    pengadaanList.length > 0 ? pengadaanList : filteredPengadaanList,
-  );
+  // Columns always based on full list so range stays stable
+  const columns = buildTimelineColumns(pengadaanList.length > 0 ? pengadaanList : filteredPengadaanList);
   const monthGroups = groupByMonth(columns);
 
   return (
@@ -609,249 +534,204 @@ export default function TimelineTable({
                 : "Tidak ada tahapan dengan status Terlambat"}
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-            <table className="min-w-full text-sm border-collapse">
-              <thead>
-                <tr>
-                  <th
-                    rowSpan={2}
-                    className="border border-gray-200 px-4 py-3 bg-gray-100 text-center font-semibold text-gray-700 w-52 min-w-[200px]"
-                  >
-                    Tahapan Proses
-                  </th>
-                  {monthGroups.map((g) => (
+          /*
+           * Wrapper: relative + max-height → header sticky, body scrolls
+           * overflow-hidden pada wrapper agar border-radius tetap
+           */
+          <div className="rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+            {/* ── Sticky Header wrapper (no scroll) ── */}
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm border-collapse">
+                <thead className="sticky top-0 z-10 bg-gray-100">
+                  <tr>
                     <th
-                      key={g.key}
-                      colSpan={g.count}
-                      className="border border-gray-200 py-2 bg-gray-100 text-center font-semibold text-gray-700 text-xs"
+                      rowSpan={2}
+                      className="border border-gray-200 px-4 py-3 bg-gray-100 text-center font-semibold text-gray-700 w-52 min-w-[200px]"
                     >
-                      {g.label}
+                      Tahapan Proses
                     </th>
-                  ))}
-                  <th
-                    rowSpan={2}
-                    className="border border-gray-200 px-4 py-3 bg-gray-100 text-center font-semibold text-gray-700 w-64 min-w-[250px]"
-                  >
-                    Keterangan
-                  </th>
-                </tr>
-                <tr>
-                  {columns.map((col, i) => (
-                    <th
-                      key={i}
-                      className="border border-gray-200 py-1 px-1 text-xs font-medium text-gray-500 bg-gray-50 text-center w-10 min-w-[36px]"
-                    >
-                      {col.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPengadaanList.map((pengadaan) => (
-                  <>
-                    {/* Pengadaan Group Header */}
-                    <tr key={`header-${pengadaan.id}`}>
-                      <td
-                        colSpan={columns.length + 2}
-                        className="border border-gray-200 px-4 py-2 bg-red-50 text-xs font-bold text-[#CB0E0E] uppercase tracking-wide"
+                    {monthGroups.map((g) => (
+                      <th
+                        key={g.key}
+                        colSpan={g.count}
+                        className="border border-gray-200 py-2 bg-gray-100 text-center font-semibold text-gray-700 text-xs"
                       >
-                        {pengadaan.namaTransaksi}
-                      </td>
-                    </tr>
+                        {g.label}
+                      </th>
+                    ))}
+                    <th
+                      rowSpan={2}
+                      className="border border-gray-200 px-4 py-3 bg-gray-100 text-center font-semibold text-gray-700 w-64 min-w-[250px]"
+                    >
+                      Keterangan
+                    </th>
+                  </tr>
+                  <tr>
+                    {columns.map((col, i) => (
+                      <th
+                        key={i}
+                        className="border border-gray-200 py-1 px-1 text-xs font-medium text-gray-500 bg-gray-50 text-center w-10 min-w-[36px]"
+                      >
+                        {col.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+              </table>
+            </div>
 
-                    {/* Tahapan Rows */}
-                    {pengadaan.tahapanList.map((tahapan) => {
-                      const planStart = getColIndex(
-                        columns,
-                        tahapan.progres.planningTanggalMulai,
-                      );
-                      const planEnd = getColIndex(
-                        columns,
-                        tahapan.progres.planningTanggalSelesai,
-                      );
-                      const actualStart = getColIndex(
-                        columns,
-                        tahapan.progres.aktualTanggalMulai,
-                      );
-                      const actualEnd = getColIndex(
-                        columns,
-                        tahapan.progres.aktualTanggalSelesai,
-                      );
+            {/* ── Scrollable Body ── */}
+            <div
+              className="overflow-x-auto overflow-y-auto"
+              style={{ maxHeight: "60vh" }}
+            >
+              <table className="min-w-full text-sm border-collapse">
+                {/* Ghost thead to keep column widths in sync */}
+                <thead className="invisible" aria-hidden="true">
+                  <tr>
+                    <th className="w-52 min-w-[200px] border border-gray-200 px-4 py-3" rowSpan={2} />
+                    {monthGroups.map((g) => (
+                      <th key={g.key} colSpan={g.count} className="border border-gray-200 py-2" />
+                    ))}
+                    <th className="w-64 min-w-[250px] border border-gray-200 px-4 py-3" rowSpan={2} />
+                  </tr>
+                  <tr>
+                    {columns.map((_, i) => (
+                      <th key={i} className="border border-gray-200 py-1 px-1 w-10 min-w-[36px]" />
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPengadaanList.map((pengadaan) => (
+                    <>
+                      <tr key={`header-${pengadaan.id}`}>
+                        <td
+                          colSpan={columns.length + 2}
+                          className="border border-gray-200 px-4 py-2 bg-red-50 text-xs font-bold text-[#CB0E0E] uppercase tracking-wide"
+                        >
+                          {pengadaan.namaTransaksi}
+                        </td>
+                      </tr>
 
-                      // Bar colour mirrors the same logic as getTahapanBarStatus
-                      let actualBarColor = "#CB0E0E";
-                      if (
-                        tahapan.progres.aktualTanggalSelesai &&
-                        tahapan.progres.planningTanggalSelesai
-                      ) {
-                        actualBarColor =
-                          new Date(tahapan.progres.aktualTanggalSelesai) <=
-                          new Date(tahapan.progres.planningTanggalSelesai)
-                            ? "#22c55e"
-                            : "#CB0E0E";
-                      }
+                      {pengadaan.tahapanList.map((tahapan) => {
+                        const planStart = getColIndex(columns, tahapan.progres.planningTanggalMulai);
+                        const planEnd = getColIndex(columns, tahapan.progres.planningTanggalSelesai);
+                        const actualStart = getColIndex(columns, tahapan.progres.aktualTanggalMulai);
+                        const actualEnd = getColIndex(columns, tahapan.progres.aktualTanggalSelesai);
 
-                      const planSpan =
-                        planStart >= 0 && planEnd >= planStart
-                          ? planEnd - planStart + 1
-                          : 0;
-                      const actualSpan =
-                        actualStart >= 0 && actualEnd >= actualStart
-                          ? actualEnd - actualStart + 1
-                          : 0;
+                        let actualBarColor = "#CB0E0E";
+                        if (tahapan.progres.aktualTanggalSelesai && tahapan.progres.planningTanggalSelesai) {
+                          actualBarColor =
+                            new Date(tahapan.progres.aktualTanggalSelesai) <= new Date(tahapan.progres.planningTanggalSelesai)
+                              ? "#22c55e"
+                              : "#CB0E0E";
+                        }
 
-                      const cells = Array(columns.length)
-                        .fill(null)
-                        .map(() => ({
-                          plan: false,
-                          actual: false,
-                          planStart: false,
-                          actualStart: false,
+                        const planSpan = planStart >= 0 && planEnd >= planStart ? planEnd - planStart + 1 : 0;
+                        const actualSpan = actualStart >= 0 && actualEnd >= actualStart ? actualEnd - actualStart + 1 : 0;
+
+                        const cells = Array(columns.length).fill(null).map(() => ({
+                          plan: false, actual: false, planStart: false, actualStart: false,
                         }));
 
-                      if (planSpan > 0) {
-                        for (
-                          let i = planStart;
-                          i <= planEnd && i < columns.length;
-                          i++
-                        ) {
-                          cells[i].plan = true;
-                          if (i === planStart) cells[i].planStart = true;
+                        if (planSpan > 0) {
+                          for (let i = planStart; i <= planEnd && i < columns.length; i++) {
+                            cells[i].plan = true;
+                            if (i === planStart) cells[i].planStart = true;
+                          }
                         }
-                      }
-
-                      if (actualSpan > 0) {
-                        for (
-                          let i = actualStart;
-                          i <= actualEnd && i < columns.length;
-                          i++
-                        ) {
-                          cells[i].actual = true;
-                          if (i === actualStart) cells[i].actualStart = true;
+                        if (actualSpan > 0) {
+                          for (let i = actualStart; i <= actualEnd && i < columns.length; i++) {
+                            cells[i].actual = true;
+                            if (i === actualStart) cells[i].actualStart = true;
+                          }
                         }
-                      }
 
-                      return (
-                        <tr
-                          key={tahapan.idTahapan}
-                          className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors"
-                        >
-                          {/* Label Cell */}
-                          <td className="border border-gray-200 px-3 py-3 bg-white align-top">
-                            <div className="flex items-start gap-2">
-                              <span className="w-5 h-5 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5">
-                                {tahapan.noUrut}
-                              </span>
-                              <div>
-                                <div className="font-bold text-gray-800 text-xs leading-tight">
-                                  {namaProgram}
-                                </div>
-                                <div className="text-xs font-medium text-[#CB0E0E] mt-0.5">
-                                  {tahapan.namaTahapan}
-                                </div>
-                                <div className="flex gap-1 mt-2">
-                                  <button
-                                    onClick={() =>
-                                      handleOpenPDF(
-                                        tahapan.progres.dokumenBukti,
-                                      )
-                                    }
-                                    disabled={
-                                      !tahapan.progres.dokumenBukti?.length
-                                    }
-                                    className={`px-2 py-0.5 text-[10px] border rounded-full shadow-sm
-                                    ${
-                                      tahapan.progres.dokumenBukti?.length
-                                        ? "border-gray-300 text-black hover:bg-gray-50"
-                                        : "border-gray-200 text-gray-400 cursor-not-allowed"
-                                    }`}
-                                  >
-                                    PDF
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      setModal({ type: "plan", tahapan })
-                                    }
-                                    className="px-2 py-0.5 text-[10px] border bg-gray-300 border-gray-300 rounded-full text-black hover:bg-gray-100 active:scale-95 transition-all shadow-sm"
-                                  >
-                                    PLAN
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      setModal({ type: "update", tahapan })
-                                    }
-                                    className="px-2 py-0.5 text-[10px] bg-red-600 text-white rounded-full hover:bg-red-700 active:scale-95 transition-all shadow-sm"
-                                  >
-                                    ACTUAL
-                                  </button>
+                        return (
+                          <tr
+                            key={tahapan.idTahapan}
+                            className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors"
+                          >
+                            <td className="border border-gray-200 px-3 py-3 bg-white align-top items-center">
+                              <div className="flex items-center gap-2">
+                                <span className="w-5 h-5 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5">
+                                  {tahapan.noUrut}
+                                </span>
+                                <div>
+                                  <div className="text-xs font-bold text-[#CB0E0E] mt-0.5">
+                                    {tahapan.namaTahapan}
+                                  </div>
+                                  <div className="flex gap-1 mt-2">
+                                    <button
+                                      onClick={() => handleOpenPDF(tahapan.progres.dokumenBukti)}
+                                      disabled={!tahapan.progres.dokumenBukti?.length}
+                                      className={`px-2 py-0.5 text-[10px] border rounded-full shadow-sm ${
+                                        tahapan.progres.dokumenBukti?.length
+                                          ? "border-gray-300 text-black hover:bg-gray-50"
+                                          : "border-gray-200 text-gray-400 cursor-not-allowed"
+                                      }`}
+                                    >
+                                      PDF
+                                    </button>
+                                    {isStaff && (
+                                      <>
+                                        <button
+                                          onClick={() => setModal({ type: "plan", tahapan })}
+                                          className="px-2 py-0.5 text-[10px] border bg-gray-300 border-gray-300 rounded-full text-black hover:bg-gray-100 active:scale-95 transition-all shadow-sm"
+                                        >
+                                          PLAN
+                                        </button>
+                                        <button
+                                          onClick={() => setModal({ type: "update", tahapan })}
+                                          className="px-2 py-0.5 text-[10px] bg-red-600 text-white rounded-full hover:bg-red-700 active:scale-95 transition-all shadow-sm"
+                                        >
+                                          ACTUAL
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          </td>
+                            </td>
 
-                          {columns.map((_, i) => {
-                            const cell = cells[i];
-
-                            const planTitle =
-                              tahapan.progres.planningTanggalMulai &&
-                              tahapan.progres.planningTanggalSelesai
+                            {columns.map((_, i) => {
+                              const cell = cells[i];
+                              const planTitle = tahapan.progres.planningTanggalMulai && tahapan.progres.planningTanggalSelesai
                                 ? `Planning: ${tahapan.progres.planningTanggalMulai.split("T")[0]} - ${tahapan.progres.planningTanggalSelesai.split("T")[0]}`
                                 : "";
-
-                            const actualTitle =
-                              tahapan.progres.aktualTanggalMulai &&
-                              tahapan.progres.aktualTanggalSelesai
+                              const actualTitle = tahapan.progres.aktualTanggalMulai && tahapan.progres.aktualTanggalSelesai
                                 ? `Aktual: ${tahapan.progres.aktualTanggalMulai.split("T")[0]} - ${tahapan.progres.aktualTanggalSelesai.split("T")[0]}`
                                 : "";
 
-                            return (
-                              <td
-                                key={i}
-                                className="border border-gray-200 p-0 relative"
-                                style={{ height: 32 }}
-                              >
-                                <div className="relative w-full h-10">
-                                  {/* PLANNING (ATAS) */}
-                                  {cell.plan && (
-                                    <div
-                                      className="absolute left-0 right-0 top-2 h-2 bg-gray-300 rounded-full"
-                                      title={planTitle}
-                                    />
-                                  )}
+                              return (
+                                <td key={i} className="border border-gray-200 p-0 relative" style={{ height: 32 }}>
+                                  <div className="relative w-full h-10">
+                                    {cell.plan && (
+                                      <div className="absolute left-0 right-0 top-2 h-2 bg-gray-300 rounded-full" title={planTitle} />
+                                    )}
+                                    {cell.actual && (
+                                      <div className="absolute left-0 right-0 bottom-2 h-2 rounded-full" style={{ backgroundColor: actualBarColor }} title={actualTitle} />
+                                    )}
+                                  </div>
+                                </td>
+                              );
+                            })}
 
-                                  {/* ACTUAL (BAWAH) */}
-                                  {cell.actual && (
-                                    <div
-                                      className="absolute left-0 right-0 bottom-2 h-2 rounded-full"
-                                      style={{
-                                        backgroundColor: actualBarColor,
-                                      }}
-                                      title={actualTitle}
-                                    />
-                                  )}
-                                </div>
-                              </td>
-                            );
-                          })}
-
-                          <td className="border border-gray-200 px-3 py-2 text-xs bg-white align-top min-w-[250px]">
-                            {tahapan.progres.keterangan ? (
-                              <div className="text-gray-700 leading-snug">
-                                {tahapan.progres.keterangan}
-                              </div>
-                            ) : (
-                              <span className="text-gray-400 italic">
-                                Belum ada keterangan
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </>
-                ))}
-              </tbody>
-            </table>
+                            <td className="border border-gray-200 px-3 py-2 text-xs bg-white align-top min-w-[250px]">
+                              {tahapan.progres.keterangan ? (
+                                <div className="text-gray-700 leading-snug">{tahapan.progres.keterangan}</div>
+                              ) : (
+                                <span className="text-gray-400 italic">Belum ada keterangan</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

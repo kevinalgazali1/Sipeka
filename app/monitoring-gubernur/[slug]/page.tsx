@@ -21,8 +21,8 @@ interface ProgramItem {
   pengadaanList: string[];
 }
 
+export default function GubernurProgramPage() {
 
-export default function ProgramPage() {
   const [programList, setProgramList] = useState<ProgramItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -52,7 +52,7 @@ export default function ProgramPage() {
       const token = getCookie("accessToken");
 
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_API}/staff/${slug}/program`,
+        `${process.env.NEXT_PUBLIC_BACKEND_API}/gubernur/dinas/${slug}/program`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -151,14 +151,14 @@ export default function ProgramPage() {
         {/* ================= BACK BUTTON ================= */}
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow hover:bg-gray-100 transition mb-10"
+          className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow hover:bg-gray-100 transition mb-10 cursor-pointer"
         >
           <ArrowLeft size={16} />
           Kembali
         </button>
 
         {/* ================= PROGRAM CARD ================= */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-10 text-black">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-6 text-black items-stretch">
           {loading && <p>Loading...</p>}
 
           {!loading && filteredProgram.length === 0 && (
@@ -175,10 +175,10 @@ export default function ProgramPage() {
               return (
                 <Link
                   key={item.id}
-                  href={`/monitoring-staff/${slug}/${subSlug}`}
+                  href={`/monitoring-gubernur/${slug}/${subSlug}`}
                   className="block"
                 >
-                  <div className="relative bg-white rounded-3xl shadow-lg p-6 hover:shadow-xl transition border-t-16 border-[#CB0E0E] flex flex-col justify-between min-h-80 min-w-50 cursor-pointer hover:scale-[1.02] duration-200">
+                  <div className="relative bg-white rounded-3xl shadow-lg p-4 hover:shadow-xl transition border-t-16 border-[#CB0E0E] flex flex-col h-full cursor-pointer hover:scale-[1.02] duration-200">
                     <div>
                       <div className="relative flex justify-between items-center mt-10 mb-6">
                         <div className="bg-[#CB0E0E] w-14 h-14 rounded-2xl flex items-center justify-center text-white text-2xl shadow">
