@@ -2,7 +2,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState, useRef } from "react";
-import { X, Save, Upload, Lock } from "lucide-react";
+import {
+  X,
+  Save,
+  Upload,
+  Lock,
+  MessageSquare,
+  ChevronRight,
+} from "lucide-react";
 import { getCookie } from "cookies-next";
 import toast from "react-hot-toast";
 
@@ -22,7 +29,6 @@ function decodeJwtPayload(token: string): Record<string, any> | null {
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
-/** Satu entri keterangan dari API */
 interface KeteranganItem {
   catatan: string;
   tanggal?: string | null;
@@ -36,11 +42,22 @@ interface Progres {
   planningTanggalSelesai: string | null;
   aktualTanggalMulai: string | null;
   aktualTanggalSelesai: string | null;
-  /** API mengembalikan array of objects {catatan, tanggal, penulis} */
   keterangan: KeteranganItem[] | string[] | string | null;
   dokumenBukti: string[];
   lastUpdatePlan?: string | null;
   lastUpdateAktual?: string | null;
+}
+
+// ── Forecast per-tahapan dari BE ──────────────────────────────────────────────
+interface TahapanForecast {
+  forecastTanggalMulai: string | null;
+  forecastTanggalSelesai: string | null;
+}
+
+// ── Forecast keseluruhan per-pengadaan dari BE ────────────────────────────────
+interface ForecastKeseluruhan {
+  planTanggalSelesaiKeseluruhan: string | null;
+  forecastTanggalSelesaiKeseluruhan: string | null;
 }
 
 interface Tahapan {
@@ -51,6 +68,7 @@ interface Tahapan {
   isWaktuEditable: boolean;
   bobot: number;
   progres: Progres;
+  forecast?: TahapanForecast | null;
   isLocked?: boolean;
 }
 
@@ -59,6 +77,7 @@ interface Pengadaan {
   namaTransaksi: string;
   jenisPengadaan: string;
   tahapanList: Tahapan[];
+  forecastKeseluruhan?: ForecastKeseluruhan | null;
 }
 
 interface TimelineTableProps {
@@ -76,167 +95,7 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(y, m - 1, d);
 }
 
-function msToIso(ms: number): string {
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-// ─── Forecasting logic (variance-based) ───────────────────────────────────────
-//
-// Algoritma:
-//   1. Iterasi tahapan secara berurutan.
-//   2. Jika tahapan sudah selesai aktual (ada aktualStart + aktualEnd):
-//        variance  = durasiAktual - durasiPlan  (hari, bisa negatif = lebih cepat)
-//        accVariance += variance
-//        forecastEnd = aktualEnd
-//        prevEnd     = aktualEnd
-//   3. Jika tahapan in-progress (ada aktualStart, belum ada aktualEnd):
-//        forecastStart   = aktualStart
-//        forecastDuration = durasiPlan + accVariance  (min 1 hari)
-//        forecastEnd     = forecastStart + forecastDuration
-//        prevEnd         = forecastEnd
-//        accVariance tetap (belum kita tahu variance sebenarnya)
-//   4. Jika tahapan belum mulai:
-//        forecastStart   = prevEnd + 1 hari  (atau planStart jika belum ada prevEnd)
-//        forecastDuration = durasiPlan + accVariance  (min 1 hari)
-//        forecastEnd     = forecastStart + forecastDuration
-//        prevEnd         = forecastEnd
-//
-// Return: array forecastEndMs (ms) per tahapan, null jika tidak ada plan.
-
 const DAY_MS = 86_400_000;
-
-interface ForecastResult {
-  forecastStartMs: number | null;
-  forecastEndMs: number | null;
-  varianceDays: number; // variance tahapan ini saja (0 jika belum ada aktual)
-  accVarianceDays: number; // akumulasi variance s.d. tahapan ini
-}
-
-function computeAllForecasts(tahapanList: Tahapan[]): ForecastResult[] {
-  if (tahapanList.length === 0) return [];
-
-  let accVarianceMs = 0; // akumulasi variance dalam ms
-  let prevEndMs: number | null = null;
-
-  return tahapanList.map((t) => {
-    const {
-      planningTanggalMulai: planStart,
-      planningTanggalSelesai: planEnd,
-      aktualTanggalMulai: aktualStart,
-      aktualTanggalSelesai: aktualEnd,
-    } = t.progres;
-
-    // Tidak ada plan → tidak bisa forecast
-    if (!planStart || !planEnd) {
-      return {
-        forecastStartMs: null,
-        forecastEndMs: null,
-        varianceDays: 0,
-        accVarianceDays: Math.round(accVarianceMs / DAY_MS),
-      };
-    }
-
-    const planStartMs = parseLocalDate(planStart).getTime();
-    const planEndMs = parseLocalDate(planEnd).getTime();
-    const planDurMs = Math.max(planEndMs - planStartMs, 0);
-
-    // ── Kasus 1: Sudah selesai aktual ────────────────────────────────────────
-    if (aktualStart && aktualEnd) {
-      const aStartMs = parseLocalDate(aktualStart).getTime();
-      const aEndMs = parseLocalDate(aktualEnd).getTime();
-      const aktualDurMs = Math.max(aEndMs - aStartMs, 0);
-      const varianceMs = aktualDurMs - planDurMs;
-
-      accVarianceMs += varianceMs;
-      prevEndMs = aEndMs;
-
-      return {
-        forecastStartMs: aStartMs,
-        forecastEndMs: aEndMs,
-        varianceDays: Math.round(varianceMs / DAY_MS),
-        accVarianceDays: Math.round(accVarianceMs / DAY_MS),
-      };
-    }
-
-    // ── Kasus 2: Sedang in-progress (ada aktualStart, belum aktualEnd) ───────
-    if (aktualStart) {
-      const aStartMs = parseLocalDate(aktualStart).getTime();
-      const forecastDurMs = Math.max(planDurMs + accVarianceMs, 0);
-      const forecastEndMs = aStartMs + forecastDurMs;
-      prevEndMs = forecastEndMs;
-
-      return {
-        forecastStartMs: aStartMs,
-        forecastEndMs,
-        varianceDays: 0,
-        accVarianceDays: Math.round(accVarianceMs / DAY_MS),
-      };
-    }
-
-    // ── Kasus 3: Belum mulai ──────────────────────────────────────────────────
-    const forecastStartMs =
-      prevEndMs !== null ? prevEndMs + DAY_MS : planStartMs;
-    const forecastDurMs = Math.max(planDurMs + accVarianceMs, 0);
-    const forecastEndMs = forecastStartMs + forecastDurMs;
-    prevEndMs = forecastEndMs;
-
-    return {
-      forecastStartMs,
-      forecastEndMs,
-      varianceDays: 0,
-      accVarianceDays: Math.round(accVarianceMs / DAY_MS),
-    };
-  });
-}
-
-function computeProgramForecast(tahapanList: Tahapan[]): {
-  forecastEndMs: number | null;
-  planEndMs: number | null;
-  deltaMs: number;
-} {
-  if (tahapanList.length === 0)
-    return { forecastEndMs: null, planEndMs: null, deltaMs: 0 };
-
-  // Plan end program = planSelesai tahapan terakhir yang punya plan
-  let programPlanEndMs: number | null = null;
-  for (const t of tahapanList) {
-    if (t.progres.planningTanggalSelesai) {
-      const ms = parseLocalDate(t.progres.planningTanggalSelesai).getTime();
-      if (programPlanEndMs === null || ms > programPlanEndMs)
-        programPlanEndMs = ms;
-    }
-  }
-  if (programPlanEndMs === null)
-    return { forecastEndMs: null, planEndMs: null, deltaMs: 0 };
-
-  const forecasts = computeAllForecasts(tahapanList);
-
-  // Forecast program = forecastEnd tahapan terakhir yang punya plan
-  let programForecastMs: number | null = null;
-  for (let i = tahapanList.length - 1; i >= 0; i--) {
-    if (
-      forecasts[i].forecastEndMs !== null &&
-      tahapanList[i].progres.planningTanggalSelesai
-    ) {
-      programForecastMs = forecasts[i].forecastEndMs;
-      break;
-    }
-  }
-  if (programForecastMs === null)
-    return {
-      forecastEndMs: programPlanEndMs,
-      planEndMs: programPlanEndMs,
-      deltaMs: 0,
-    };
-
-  const deltaMs = Math.max(0, programForecastMs - programPlanEndMs);
-  return {
-    forecastEndMs: programForecastMs,
-    planEndMs: programPlanEndMs,
-    deltaMs,
-  };
-}
 
 // ─── Status helper ─────────────────────────────────────────────────────────────
 
@@ -271,8 +130,7 @@ function buildTimelineColumns(pengadaanList: Pengadaan[]) {
   const allDates: Date[] = [];
 
   pengadaanList.forEach((p) => {
-    const forecasts = computeAllForecasts(p.tahapanList);
-    p.tahapanList.forEach((t, i) => {
+    p.tahapanList.forEach((t) => {
       if (t.progres.planningTanggalMulai)
         allDates.push(parseLocalDate(t.progres.planningTanggalMulai));
       if (t.progres.planningTanggalSelesai)
@@ -281,11 +139,17 @@ function buildTimelineColumns(pengadaanList: Pengadaan[]) {
         allDates.push(parseLocalDate(t.progres.aktualTanggalMulai));
       if (t.progres.aktualTanggalSelesai)
         allDates.push(parseLocalDate(t.progres.aktualTanggalSelesai));
-      const fr = forecasts[i];
-      if (fr.forecastStartMs !== null)
-        allDates.push(new Date(fr.forecastStartMs));
-      if (fr.forecastEndMs !== null) allDates.push(new Date(fr.forecastEndMs));
+      // Sertakan tanggal forecast dari BE ke range kolom
+      if (t.forecast?.forecastTanggalMulai)
+        allDates.push(parseLocalDate(t.forecast.forecastTanggalMulai));
+      if (t.forecast?.forecastTanggalSelesai)
+        allDates.push(parseLocalDate(t.forecast.forecastTanggalSelesai));
     });
+    // Sertakan forecastKeseluruhan ke range kolom
+    if (p.forecastKeseluruhan?.forecastTanggalSelesaiKeseluruhan)
+      allDates.push(
+        parseLocalDate(p.forecastKeseluruhan.forecastTanggalSelesaiKeseluruhan),
+      );
   });
 
   if (allDates.length === 0) {
@@ -417,8 +281,35 @@ function formatDisplayDate(dateStr: string | null | undefined): string {
   return `${String(d).padStart(2, "0")} ${mn[m - 1]} ${y}`;
 }
 
-function formatDisplayDateMs(ms: number): string {
-  return formatDisplayDate(msToIso(ms));
+// ─── Normalize keterangan helper ───────────────────────────────────────────────
+
+function normalizeKeterangan(raw: any): KeteranganItem[] {
+  if (!raw) return [];
+  if (typeof raw === "string") return raw.trim() ? [{ catatan: raw }] : [];
+  if (Array.isArray(raw)) {
+    return raw.filter(Boolean).map((item) =>
+      typeof item === "string"
+        ? { catatan: item }
+        : {
+            catatan: item.catatan ?? item.keterangan ?? String(item),
+            tanggal: item.tanggal,
+            penulis: item.penulis,
+          },
+    );
+  }
+  return [];
+}
+
+// ─── Hitung variance hari antara plan selesai dan forecast selesai dari BE ─────
+
+function getForecastVarianceDays(tahapan: Tahapan): number {
+  const planSelesai = tahapan.progres.planningTanggalSelesai;
+  const forecastSelesai = tahapan.forecast?.forecastTanggalSelesai;
+  if (!planSelesai || !forecastSelesai) return 0;
+  const delta =
+    parseLocalDate(forecastSelesai).getTime() -
+    parseLocalDate(planSelesai).getTime();
+  return Math.round(delta / DAY_MS);
 }
 
 // ─── Modal Shell ───────────────────────────────────────────────────────────────
@@ -426,9 +317,13 @@ function formatDisplayDateMs(ms: number): string {
 function ModalShell({
   onClose,
   children,
+  accentColor = "#22c55e",
+  width = "w-[460px]",
 }: {
   onClose: () => void;
   children: React.ReactNode;
+  accentColor?: string;
+  width?: string;
 }) {
   return (
     <div
@@ -436,9 +331,9 @@ function ModalShell({
       onClick={onClose}
     >
       <div
-        className="relative bg-white rounded-3xl shadow-2xl w-[460px] max-h-[90vh] overflow-y-auto"
+        className={`relative bg-white rounded-3xl shadow-2xl ${width} max-h-[90vh] overflow-y-auto`}
         style={{
-          borderTop: "6px solid #22c55e",
+          borderTop: `6px solid ${accentColor}`,
           animation: "modalIn 0.2s ease",
         }}
         onClick={(e) => e.stopPropagation()}
@@ -453,16 +348,18 @@ function ModalShell({
 function ModalHeader({
   subtitle,
   onClose,
+  title = "KONFIGURASI TAHAPAN",
 }: {
   subtitle: string;
   onClose: () => void;
+  title?: string;
 }) {
   return (
     <>
       <div className="flex justify-between items-start mb-1">
         <div>
           <h2 className="font-bold text-gray-900 text-base tracking-wide">
-            KONFIGURASI TAHAPAN
+            {title}
           </h2>
           <p className="text-sm text-gray-500 mt-0.5 italic">{subtitle}</p>
         </div>
@@ -496,6 +393,109 @@ function LastUpdateBadge({
         )}
       </span>
     </div>
+  );
+}
+
+// ─── Keterangan History Modal ──────────────────────────────────────────────────
+
+function KeteranganModal({
+  namaTahapan,
+  keteranganList,
+  onClose,
+}: {
+  namaTahapan: string;
+  keteranganList: KeteranganItem[];
+  onClose: () => void;
+}) {
+  const reversed = [...keteranganList].reverse();
+
+  return (
+    <ModalShell onClose={onClose} accentColor="#3b82f6" width="w-[520px]">
+      <div className="px-7 pt-6 pb-7">
+        <ModalHeader
+          title="RIWAYAT KETERANGAN"
+          subtitle={namaTahapan}
+          onClose={onClose}
+        />
+
+        {keteranganList.length === 0 ? (
+          <div className="text-center py-8 text-gray-400 text-sm italic">
+            Belum ada keterangan untuk tahapan ini
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 rounded-full text-xs font-semibold text-blue-600">
+                <MessageSquare size={11} />
+                {keteranganList.length} catatan
+              </span>
+              <span className="text-[10px] text-gray-400">
+                Diurutkan dari terbaru
+              </span>
+            </div>
+
+            <ol className="space-y-3">
+              {reversed.map((item, idx) => {
+                const isLatest = idx === 0;
+                const originalNumber = keteranganList.length - idx;
+                return (
+                  <li
+                    key={idx}
+                    className={`relative flex gap-3 p-3 rounded-xl border transition-colors ${
+                      isLatest
+                        ? "bg-blue-50 border-blue-200"
+                        : "bg-gray-50 border-gray-100"
+                    }`}
+                  >
+                    <span
+                      className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold mt-0.5 ${
+                        isLatest
+                          ? "bg-blue-500 text-white"
+                          : "bg-gray-200 text-gray-500"
+                      }`}
+                    >
+                      {originalNumber}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`text-xs leading-snug ${isLatest ? "text-blue-900 font-medium" : "text-gray-700"}`}
+                      >
+                        {item.catatan}
+                      </p>
+                      {(item.tanggal || item.penulis) && (
+                        <p className="text-[9px] text-gray-400 mt-1 flex items-center gap-1">
+                          {item.penulis && (
+                            <span className="font-semibold">
+                              {item.penulis}
+                            </span>
+                          )}
+                          {item.penulis && item.tanggal && <span>·</span>}
+                          {item.tanggal && (
+                            <span>{formatDisplayDate(item.tanggal)}</span>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    {isLatest && (
+                      <span className="shrink-0 self-start px-1.5 py-0.5 bg-blue-500 text-white text-[8px] font-bold rounded-full">
+                        TERBARU
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </>
+        )}
+
+        <button
+          onClick={onClose}
+          className="mt-6 w-full py-2.5 rounded-xl text-sm font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200"
+        >
+          TUTUP
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 
@@ -655,11 +655,6 @@ function PlanModal({
   );
 }
 
-// ─── Update (Actual) Modal ─────────────────────────────────────────────────────
-// PERUBAHAN:
-//   1. Keterangan = input baru saja (tidak tampilkan keterangan lama di modal)
-//   2. Tombol Kunci → panggil endpoint /selesai (bukan hanya state lokal)
-
 function UpdateModal({
   tahapan,
   onClose,
@@ -681,7 +676,7 @@ function UpdateModal({
     formatDateForInput(tahapan.progres.aktualTanggalSelesai),
   );
   const [fileName, setFileName] = useState<string | null>(null);
-  const [keterangan, setKeterangan] = useState(""); // ← selalu kosong, hanya input baru
+  const [keterangan, setKeterangan] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [lockLoading, setLockLoading] = useState(false);
@@ -768,7 +763,6 @@ function UpdateModal({
     }
   }
 
-  // ── Lock: panggil endpoint /selesai di kedua server ───────────────────────
   async function handleLockConfirm() {
     try {
       setLockLoading(true);
@@ -822,7 +816,6 @@ function UpdateModal({
           <span className="italic font-normal">(actual)</span>
         </p>
 
-        {/* Tanggal berdampingan */}
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex gap-4">
           <div className="flex-1">
             <label className="block text-xs font-semibold text-gray-500 mb-1.5 tracking-wider">
@@ -871,7 +864,6 @@ function UpdateModal({
           </div>
         </div>
 
-        {/* Upload */}
         <div className="mt-4 bg-gray-50 border border-gray-200 rounded-xl p-4">
           <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
             <Upload size={15} className="text-gray-500" />
@@ -903,7 +895,6 @@ function UpdateModal({
           </div>
         </div>
 
-        {/* Keterangan — hanya input baru, tidak tampilkan riwayat di sini */}
         <div className="mt-4">
           <label className="block text-sm font-semibold text-gray-700 mb-1.5">
             Keterangan Baru
@@ -934,7 +925,6 @@ function UpdateModal({
           </p>
         </div>
 
-        {/* Kunci */}
         {confirmLock ? (
           <div className="mt-4 bg-orange-50 border border-orange-200 rounded-xl p-4">
             <p className="text-sm font-semibold text-orange-700 mb-3">
@@ -1017,6 +1007,12 @@ export default function TimelineTable({
     tahapan: Tahapan;
     prevTahapanSelesai?: string | null;
   } | null>(null);
+
+  const [keteranganModal, setKeteranganModal] = useState<{
+    namaTahapan: string;
+    keteranganList: KeteranganItem[];
+  } | null>(null);
+
   const [lockedTahapan, setLockedTahapan] = useState<Set<number>>(new Set());
   function handleLock(id: number) {
     setLockedTahapan((prev) => new Set(prev).add(id));
@@ -1032,7 +1028,7 @@ export default function TimelineTable({
   })();
   const canEditTimeline = !isGubernur;
 
-  // Filter by sidebar activeTab
+  // ── Tab & status filter ────────────────────────────────────────────────────
   let tabFilteredList = pengadaanList;
   if (activeTab.startsWith("pengadaan-")) {
     const pengId = parseInt(activeTab.replace("pengadaan-", ""), 10);
@@ -1204,45 +1200,53 @@ export default function TimelineTable({
                 </thead>
                 <tbody>
                   {filteredPengadaanList.map((pengadaan) => {
-                    const forecastMsList = computeAllForecasts(
-                      pengadaan.tahapanList,
-                    );
-                    const {
-                      forecastEndMs: programForecastMs,
-                      planEndMs: programPlanEndMs,
-                      deltaMs,
-                    } = computeProgramForecast(pengadaan.tahapanList);
+                    // ── Forecast keseluruhan dari BE ───────────────────────────
+                    const fk = pengadaan.forecastKeseluruhan;
+                    const planEndKeseluruhan = fk?.planTanggalSelesaiKeseluruhan
+                      ? parseLocalDate(
+                          fk.planTanggalSelesaiKeseluruhan,
+                        ).getTime()
+                      : null;
+                    const forecastEndKeseluruhan =
+                      fk?.forecastTanggalSelesaiKeseluruhan
+                        ? parseLocalDate(
+                            fk.forecastTanggalSelesaiKeseluruhan,
+                          ).getTime()
+                        : null;
+
+                    const deltaMs =
+                      planEndKeseluruhan !== null &&
+                      forecastEndKeseluruhan !== null
+                        ? Math.max(
+                            0,
+                            forecastEndKeseluruhan - planEndKeseluruhan,
+                          )
+                        : 0;
 
                     const lastPlanEndCol =
-                      programPlanEndMs !== null
-                        ? getColIndexFromMs(columns, programPlanEndMs)
+                      planEndKeseluruhan !== null
+                        ? getColIndexFromMs(columns, planEndKeseluruhan)
                         : -1;
                     const overallForecastCol =
-                      programForecastMs !== null
-                        ? getColIndexFromMs(columns, programForecastMs)
+                      forecastEndKeseluruhan !== null
+                        ? getColIndexFromMs(columns, forecastEndKeseluruhan)
                         : -1;
                     const showProgramForecast =
                       deltaMs > 0 &&
-                      programForecastMs !== null &&
+                      forecastEndKeseluruhan !== null &&
                       overallForecastCol >= 0;
 
-                    // Ambil accVarianceDays dari tahapan terakhir yang punya plan
-                    // (bukan total deltaMs program, tapi variance akumulasi tahapan terakhir)
-                    const lastForecastWithPlan = (() => {
-                      for (let i = forecastMsList.length - 1; i >= 0; i--) {
-                        if (
-                          forecastMsList[i].forecastEndMs !== null &&
-                          pengadaan.tahapanList[i].progres.planningTanggalSelesai
-                        )
-                          return forecastMsList[i];
-                      }
-                      return null;
-                    })();
+                    // Hitung keterlambatan hari untuk baris forecast program
                     const forecastDelayDays =
-                      lastForecastWithPlan?.accVarianceDays ?? 0;
+                      planEndKeseluruhan !== null &&
+                      forecastEndKeseluruhan !== null
+                        ? Math.round(
+                            (forecastEndKeseluruhan - planEndKeseluruhan) /
+                              DAY_MS,
+                          )
+                        : 0;
 
                     return [
-                      // Pengadaan header row
                       <tr key={`header-${pengadaan.id}`}>
                         <td
                           colSpan={columns.length + 2}
@@ -1252,13 +1256,13 @@ export default function TimelineTable({
                         </td>
                       </tr>,
 
-                      // Tahapan rows
                       ...pengadaan.tahapanList.map((tahapan, tahapanIdx) => {
-                        // Locked: status API "selesai" ATAU field isLocked dari server ATAU dikunci lokal sesi ini
                         const isLocked =
                           tahapan.progres.status === "selesai" ||
                           !!tahapan.isLocked ||
                           lockedTahapan.has(tahapan.idTahapan);
+
+                        // ── Kolom plan & aktual ──────────────────────────────
                         const planStart = getColIndex(
                           columns,
                           tahapan.progres.planningTanggalMulai,
@@ -1301,29 +1305,48 @@ export default function TimelineTable({
                             ? actualEnd - actualStart + 1
                             : 0;
 
-                        const fr = forecastMsList[tahapanIdx];
-                        const forecastEndMs = fr.forecastEndMs;
-                        const forecastStartMs = fr.forecastStartMs;
+                        // ── Forecast dari BE ─────────────────────────────────
+                        const fcMulai =
+                          tahapan.forecast?.forecastTanggalMulai ?? null;
+                        const fcSelesai =
+                          tahapan.forecast?.forecastTanggalSelesai ?? null;
+
+                        const forecastStartMs = fcMulai
+                          ? parseLocalDate(fcMulai).getTime()
+                          : null;
+                        const forecastEndMs = fcSelesai
+                          ? parseLocalDate(fcSelesai).getTime()
+                          : null;
+
                         const planEndMs = tahapan.progres.planningTanggalSelesai
                           ? parseLocalDate(
                               tahapan.progres.planningTanggalSelesai,
                             ).getTime()
                           : -1;
 
-                        // ── PERUBAHAN 1: showForecastBar tambah !isLocked ──────
-                        // Bar forecast hanya tampil jika ada data forecast
-                        // DAN tahapan belum selesai/terkunci
+                        // Tampilkan bar forecast hanya jika:
+                        // - ada data forecast dari BE
+                        // - ada planning
+                        // - tahapan belum locked
+                        // - status tahapan BUKAN terlambat
+                        const barStatus = getTahapanBarStatus(tahapan);
                         const showForecastBar =
+                          forecastStartMs !== null &&
                           forecastEndMs !== null &&
                           planStart >= 0 &&
                           planEnd >= planStart &&
-                          !isLocked; // ← bar forecast hilang jika tahapan selesai
+                          !isLocked &&
+                          barStatus !== "terlambat";
 
                         const isDelayed =
                           forecastEndMs !== null &&
                           planEndMs > -1 &&
                           forecastEndMs > planEndMs;
 
+                        // Variance hari forecast vs plan
+                        const varianceDays = getForecastVarianceDays(tahapan);
+
+                        // ── Isi sel-sel timeline ─────────────────────────────
                         const cells = Array(columns.length)
                           .fill(null)
                           .map(() => ({
@@ -1331,6 +1354,7 @@ export default function TimelineTable({
                             actual: false,
                             forecast: false,
                           }));
+
                         if (planSpan > 0)
                           for (
                             let i = planStart;
@@ -1346,23 +1370,26 @@ export default function TimelineTable({
                           )
                             cells[i].actual = true;
 
-                        // ── PERUBAHAN 2: forecast bar mulai di tanggal forecast,
-                        // panjangnya = jumlah kolom plan (bukan rentang forecast asli)
-                        const forecastBarStart =
-                          forecastStartMs !== null
-                            ? getColIndexFromMs(columns, forecastStartMs)
-                            : -1;
-                        const planSpanCount =
-                          planStart >= 0 && planEnd >= planStart
-                            ? planEnd - planStart + 1
-                            : 0;
-                        if (showForecastBar && forecastBarStart >= 0 && planSpanCount > 0)
-                          for (
-                            let i = forecastBarStart;
-                            i < forecastBarStart + planSpanCount && i < columns.length;
-                            i++
+                        if (showForecastBar) {
+                          const forecastBarStart = getColIndexFromMs(
+                            columns,
+                            forecastStartMs!,
+                          );
+                          const forecastBarEnd = getColIndexFromMs(
+                            columns,
+                            forecastEndMs!,
+                          );
+                          if (
+                            forecastBarStart >= 0 &&
+                            forecastBarEnd >= forecastBarStart
                           )
-                            cells[i].forecast = true;
+                            for (
+                              let i = forecastBarStart;
+                              i <= forecastBarEnd && i < columns.length;
+                              i++
+                            )
+                              cells[i].forecast = true;
+                        }
 
                         const prevTahapanSelesai =
                           tahapanIdx > 0
@@ -1370,35 +1397,17 @@ export default function TimelineTable({
                                 .planningTanggalSelesai ?? null)
                             : null;
 
-                        // ── Normalise keterangan → KeteranganItem[] ───────────
-                        function normalizeKeterangan(
-                          raw: any,
-                        ): KeteranganItem[] {
-                          if (!raw) return [];
-                          if (typeof raw === "string")
-                            return raw.trim() ? [{ catatan: raw }] : [];
-                          if (Array.isArray(raw)) {
-                            return raw
-                              .filter(Boolean)
-                              .map((item) =>
-                                typeof item === "string"
-                                  ? { catatan: item }
-                                  : {
-                                      catatan:
-                                        item.catatan ??
-                                        item.keterangan ??
-                                        String(item),
-                                      tanggal: item.tanggal,
-                                      penulis: item.penulis,
-                                    },
-                              );
-                          }
-                          return [];
-                        }
+                        // ── Keterangan ───────────────────────────────────────
                         const keteranganList = normalizeKeterangan(
                           tahapan.progres.keterangan,
                         );
+                        const latestKeterangan =
+                          keteranganList.length > 0
+                            ? keteranganList[keteranganList.length - 1]
+                            : null;
+                        const hasMoreKeterangan = keteranganList.length > 1;
 
+                        // ── Tooltip titles ───────────────────────────────────
                         const planTitle =
                           tahapan.progres.planningTanggalMulai &&
                           tahapan.progres.planningTanggalSelesai
@@ -1412,8 +1421,8 @@ export default function TimelineTable({
                               ? `Aktual mulai: ${formatDisplayDate(tahapan.progres.aktualTanggalMulai)} (sedang berjalan)`
                               : "";
                         const forecastTitle =
-                          forecastEndMs !== null
-                            ? `Forecast: ${forecastStartMs ? formatDisplayDateMs(forecastStartMs) + " → " : ""}${formatDisplayDateMs(forecastEndMs)}${fr.accVarianceDays !== 0 ? " (variance: " + (fr.accVarianceDays > 0 ? "+" : "") + fr.accVarianceDays + " hari)" : ""}`
+                          fcMulai && fcSelesai
+                            ? `Forecast: ${formatDisplayDate(fcMulai)} → ${formatDisplayDate(fcSelesai)}${varianceDays !== 0 ? ` (variance: ${varianceDays > 0 ? "+" : ""}${varianceDays} hari)` : ""}`
                             : "";
 
                         return (
@@ -1440,7 +1449,6 @@ export default function TimelineTable({
                                       />
                                     )}
                                   </div>
-
                                   <div className="mt-1 space-y-0.5">
                                     {tahapan.progres.lastUpdatePlan && (
                                       <div className="text-[9px] text-gray-400 flex items-center gap-1">
@@ -1466,31 +1474,33 @@ export default function TimelineTable({
                                         </span>
                                       </div>
                                     )}
-                                    {forecastEndMs !== null && !isLocked && (
-                                      <div
-                                        className={`text-[9px] flex items-center gap-1 font-semibold ${isDelayed ? "text-amber-500" : "text-gray-400"}`}
-                                      >
-                                        <span>Forecast:</span>
-                                        <span>
-                                          {formatDisplayDateMs(forecastEndMs)}
-                                        </span>
-                                        {fr.accVarianceDays !== 0 && (
-                                          <span
-                                            className={`font-normal ${fr.accVarianceDays > 0 ? "text-red-400" : "text-green-500"}`}
-                                          >
-                                            ({fr.accVarianceDays > 0 ? "+" : ""}
-                                            {fr.accVarianceDays}h)
+                                    {/* Tampilkan forecast selesai dari BE — hanya jika tidak terlambat */}
+                                    {fcSelesai &&
+                                      !isLocked &&
+                                      barStatus !== "terlambat" && (
+                                        <div
+                                          className={`text-[9px] flex items-center gap-1 font-semibold ${isDelayed ? "text-amber-500" : "text-gray-400"}`}
+                                        >
+                                          <span>Forecast:</span>
+                                          <span>
+                                            {formatDisplayDate(fcSelesai)}
                                           </span>
-                                        )}
-                                        {isDelayed && (
-                                          <span className="font-normal text-amber-400">
-                                            (terlambat)
-                                          </span>
-                                        )}
-                                      </div>
-                                    )}
+                                          {varianceDays !== 0 && (
+                                            <span
+                                              className={`font-normal ${varianceDays > 0 ? "text-red-400" : "text-green-500"}`}
+                                            >
+                                              ({varianceDays > 0 ? "+" : ""}
+                                              {varianceDays}h)
+                                            </span>
+                                          )}
+                                          {isDelayed && (
+                                            <span className="font-normal text-amber-400">
+                                              (terlambat)
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
                                   </div>
-
                                   <div className="flex gap-1 mt-2 flex-wrap">
                                     <button
                                       onClick={() =>
@@ -1505,8 +1515,6 @@ export default function TimelineTable({
                                     >
                                       PDF
                                     </button>
-
-                                    {/* Tombol PLAN & ACTUAL hanya muncul jika tidak terkunci */}
                                     {canEditTimeline && !isLocked && (
                                       <>
                                         <button
@@ -1535,8 +1543,6 @@ export default function TimelineTable({
                                         </button>
                                       </>
                                     )}
-
-                                    {/* Badge terkunci */}
                                     {isLocked && (
                                       <span className="px-2 py-0.5 text-[10px] bg-orange-100 text-orange-600 border border-orange-300 rounded-full flex items-center gap-0.5">
                                         <Lock size={8} />
@@ -1560,7 +1566,6 @@ export default function TimelineTable({
                                   style={{ height: hasAktual ? 44 : 32 }}
                                 >
                                   <div className="absolute inset-0 flex flex-col justify-around py-1 px-0">
-                                    {/* Track 1 — Plan */}
                                     <div className="h-2 w-full relative">
                                       {cell.plan && (
                                         <div
@@ -1569,7 +1574,6 @@ export default function TimelineTable({
                                         />
                                       )}
                                     </div>
-                                    {/* Track 2 — Actual */}
                                     {hasAktual && (
                                       <div className="h-2 w-full relative">
                                         {cell.actual && (
@@ -1583,7 +1587,6 @@ export default function TimelineTable({
                                         )}
                                       </div>
                                     )}
-                                    {/* Track 3 — Forecast */}
                                     <div className="h-2 w-full relative">
                                       {cell.forecast && (
                                         <div
@@ -1598,45 +1601,59 @@ export default function TimelineTable({
                               );
                             })}
 
-                            {/* ── Keterangan cell — tampilkan semua item array ── */}
+                            {/* Keterangan cell */}
                             <td className="border border-gray-200 px-3 py-2 text-xs bg-white align-top min-w-[250px]">
-                              {keteranganList.length > 0 ? (
-                                <ol className="space-y-1.5 list-none">
-                                  {keteranganList.map((item, idx) => (
-                                    <li
-                                      key={idx}
-                                      className="flex gap-1.5 leading-snug"
-                                    >
-                                      <span className="shrink-0 w-4 h-4 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-[9px] font-bold mt-0.5">
-                                        {idx + 1}
-                                      </span>
-                                      <div className="min-w-0">
-                                        <p className="text-gray-700">
-                                          {item.catatan}
+                              {latestKeterangan ? (
+                                <div className="space-y-1.5">
+                                  <div className="flex gap-1.5 leading-snug">
+                                    <span className="shrink-0 w-4 h-4 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[9px] font-bold mt-0.5">
+                                      {keteranganList.length}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <p className="text-gray-700 line-clamp-3">
+                                        {latestKeterangan.catatan}
+                                      </p>
+                                      {(latestKeterangan.tanggal ||
+                                        latestKeterangan.penulis) && (
+                                        <p className="text-[9px] text-gray-400 mt-0.5">
+                                          {latestKeterangan.penulis && (
+                                            <span className="font-semibold">
+                                              {latestKeterangan.penulis}
+                                            </span>
+                                          )}
+                                          {latestKeterangan.penulis &&
+                                            latestKeterangan.tanggal &&
+                                            " · "}
+                                          {latestKeterangan.tanggal && (
+                                            <span>
+                                              {formatDisplayDate(
+                                                latestKeterangan.tanggal,
+                                              )}
+                                            </span>
+                                          )}
                                         </p>
-                                        {(item.tanggal || item.penulis) && (
-                                          <p className="text-[9px] text-gray-400 mt-0.5">
-                                            {item.penulis && (
-                                              <span className="font-semibold">
-                                                {item.penulis}
-                                              </span>
-                                            )}
-                                            {item.penulis &&
-                                              item.tanggal &&
-                                              " · "}
-                                            {item.tanggal && (
-                                              <span>
-                                                {formatDisplayDate(
-                                                  item.tanggal,
-                                                )}
-                                              </span>
-                                            )}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ol>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() =>
+                                      setKeteranganModal({
+                                        namaTahapan: tahapan.namaTahapan,
+                                        keteranganList,
+                                      })
+                                    }
+                                    className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-700 font-semibold transition-colors group"
+                                  >
+                                    <MessageSquare size={10} />
+                                    {hasMoreKeterangan
+                                      ? `Lihat semua (${keteranganList.length} catatan)`
+                                      : "Lihat detail"}
+                                    <ChevronRight
+                                      size={10}
+                                      className="group-hover:translate-x-0.5 transition-transform"
+                                    />
+                                  </button>
+                                </div>
                               ) : (
                                 <span className="text-gray-400 italic">
                                   Belum ada keterangan
@@ -1647,7 +1664,7 @@ export default function TimelineTable({
                         );
                       }),
 
-                      // Program forecast summary row
+                      // ── Baris estimasi selesai program (dari forecastKeseluruhan BE) ──
                       ...(showProgramForecast
                         ? [
                             <tr
@@ -1659,11 +1676,14 @@ export default function TimelineTable({
                                   📅 Estimasi Selesai Program
                                 </div>
                                 <div className="text-[10px] text-amber-600 mt-0.5">
-                                  {formatDisplayDateMs(programForecastMs!)}
+                                  {formatDisplayDate(
+                                    fk!.forecastTanggalSelesaiKeseluruhan,
+                                  )}
                                   <span
                                     className={`ml-1 font-bold ${forecastDelayDays > 0 ? "text-red-500" : forecastDelayDays < 0 ? "text-green-500" : "text-gray-400"}`}
                                   >
-                                    {forecastDelayDays > 0 ? "+" : ""}{forecastDelayDays} hari
+                                    {forecastDelayDays > 0 ? "+" : ""}
+                                    {forecastDelayDays} hari
                                   </span>
                                 </div>
                               </td>
@@ -1706,6 +1726,7 @@ export default function TimelineTable({
         )}
       </div>
 
+      {/* Modals */}
       {modal?.type === "plan" && (
         <PlanModal
           tahapan={modal.tahapan}
@@ -1718,6 +1739,14 @@ export default function TimelineTable({
           tahapan={modal.tahapan}
           onClose={() => setModal(null)}
           onLock={handleLock}
+        />
+      )}
+
+      {keteranganModal && (
+        <KeteranganModal
+          namaTahapan={keteranganModal.namaTahapan}
+          keteranganList={keteranganModal.keteranganList}
+          onClose={() => setKeteranganModal(null)}
         />
       )}
     </>

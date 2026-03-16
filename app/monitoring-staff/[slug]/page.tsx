@@ -52,6 +52,7 @@ export default function StaffProgramPage() {
   const [programList, setProgramList] = useState<ProgramItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [namaProgram, setNamaProgram] = useState("");
+  const [tanggalMulai, setTanggalMulai] = useState("");
   const [metode, setMetode] = useState<SelectedMetode[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -135,6 +136,11 @@ export default function StaffProgramPage() {
       return;
     }
 
+    if (!tanggalMulai) {
+      toast.error("Tanggal mulai wajib diisi");
+      return;
+    }
+
     if (metode.length === 0) {
       toast.error("Pilih minimal satu metode pengadaan");
       return;
@@ -154,6 +160,7 @@ export default function StaffProgramPage() {
 
       const payload = {
         namaProgram,
+        tanggalMulai,
         pengadaanList: metode.map((m) => ({
           pengadaanId: m.pengadaanId,
           title: m.title,
@@ -179,6 +186,7 @@ export default function StaffProgramPage() {
       toast.success(json.msg);
 
       setNamaProgram("");
+      setTanggalMulai("");
       setMetode([]);
       setOpen(false);
       fetchProgram();
@@ -452,7 +460,7 @@ export default function StaffProgramPage() {
         </div>
       </div>
 
-      {/* MODAL */}
+      {/* MODAL TAMBAH */}
       {open && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm py-6"
@@ -467,7 +475,7 @@ export default function StaffProgramPage() {
             <div className="relative mt-8 flex justify-between items-start">
               <div>
                 <p className="text-sm font-semibold italic">REGISTRASI BARU</p>
-                <p className="text-xs text-gray-600">Dinas BMBK</p>
+                <p className="text-xs text-gray-600">{formatNamaDinas(slug)}</p>
               </div>
               <button
                 onClick={() => setOpen(false)}
@@ -494,7 +502,18 @@ export default function StaffProgramPage() {
                 />
               </div>
 
-              {/* Metode Pengadaan (anggaran sudah ada di dalam) */}
+              {/* Tanggal Mulai */}
+              <div>
+                <label className="text-sm text-gray-600">Tanggal Mulai</label>
+                <input
+                  type="date"
+                  value={tanggalMulai}
+                  onChange={(e) => setTanggalMulai(e.target.value)}
+                  className="w-full mt-2 px-4 py-2 rounded-lg bg-gray-200 outline-none focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+
+              {/* Metode Pengadaan */}
               <div>
                 <label className="text-sm text-gray-600">
                   Metode Pengadaan
@@ -541,6 +560,7 @@ export default function StaffProgramPage() {
         </div>
       )}
 
+      {/* MODAL EDIT */}
       {openEdit && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"

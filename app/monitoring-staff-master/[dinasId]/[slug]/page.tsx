@@ -49,6 +49,7 @@ export default function AdminProgramPage() {
   const [programList, setProgramList] = useState<ProgramItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [namaProgram, setNamaProgram] = useState("");
+  const [tanggalMulai, setTanggalMulai] = useState("");
   const [metode, setMetode] = useState<SelectedMetode[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -131,6 +132,11 @@ export default function AdminProgramPage() {
       return;
     }
 
+    if (!tanggalMulai) {
+      toast.error("Tanggal mulai wajib diisi");
+      return;
+    }
+
     if (metode.length === 0) {
       toast.error("Pilih minimal satu metode pengadaan");
       return;
@@ -150,6 +156,7 @@ export default function AdminProgramPage() {
 
       const payload = {
         namaProgram,
+        tanggalMulai,
         dinasId,
         pengadaanList: metode.map((m) => ({
           pengadaanId: m.pengadaanId,
@@ -176,6 +183,7 @@ export default function AdminProgramPage() {
       toast.success(json.msg);
 
       setNamaProgram("");
+      setTanggalMulai("");
       setMetode([]);
       setOpen(false);
       fetchProgram();
@@ -330,7 +338,7 @@ h-90"
             <div className="relative mt-8 flex justify-between items-start">
               <div>
                 <p className="text-sm font-semibold italic">REGISTRASI BARU</p>
-                <p className="text-xs text-gray-600">Dinas BMBK</p>
+                <p className="text-xs text-gray-600">{formatNamaDinas(slug)}</p>
               </div>
               <button
                 onClick={() => setOpen(false)}
@@ -353,6 +361,17 @@ h-90"
                   type="text"
                   value={namaProgram}
                   onChange={(e) => setNamaProgram(e.target.value)}
+                  className="w-full mt-2 px-4 py-2 rounded-lg bg-gray-200 outline-none focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+
+              {/* Tanggal Mulai */}
+              <div>
+                <label className="text-sm text-gray-600">Tanggal Mulai</label>
+                <input
+                  type="date"
+                  value={tanggalMulai}
+                  onChange={(e) => setTanggalMulai(e.target.value)}
                   className="w-full mt-2 px-4 py-2 rounded-lg bg-gray-200 outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
