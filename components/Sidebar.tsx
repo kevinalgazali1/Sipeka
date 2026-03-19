@@ -36,6 +36,7 @@ interface SidebarProps {
   onTabChange?: (tab: string) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (v: boolean) => void;
+  namaDinas?: string;
 }
 
 const formatRupiahCompact = (value: number): string => {
@@ -56,6 +57,7 @@ export default function Sidebar({
   onTabChange,
   sidebarOpen,
   setSidebarOpen,
+  namaDinas,
 }: SidebarProps) {
   const router = useRouter();
   const [openDropdowns, setOpenDropdowns] = useState<Record<number, boolean>>({});
@@ -194,7 +196,7 @@ export default function Sidebar({
             <Building2 color="#CB0E0E" size={20} />
             <div>
               <p className="text-[#CB0E0E] font-semibold text-xs">Instansi</p>
-              <p className="text-gray-700 text-xs">DINAS BMBK</p>
+              <p className="text-gray-700 text-xs">{namaDinas ?? "—"}</p>
             </div>
           </div>
         </div>

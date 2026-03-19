@@ -327,6 +327,7 @@ export default function MonitoringProgramPage() {
         onTabChange={setActiveTab}
         sidebarOpen={true}
         setSidebarOpen={() => {}}
+        namaDinas={program?.dinas?.namaDinas}
       />
 
       <button
