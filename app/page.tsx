@@ -82,7 +82,7 @@ export default function LoginPage() {
           <div className="flex-1 flex flex-col justify-center px-12 pt-4 md:px-20 text-white">
             
             <h1 className="text-5xl font-extrabold tracking-wide mb-6">
-              PEMPROV SULSEL
+              MONEVPRIO
             </h1>
 
             <p className="max-w-xl text-lg text-gray-200 leading-relaxed">

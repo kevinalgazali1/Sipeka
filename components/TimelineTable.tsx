@@ -901,6 +901,11 @@ function UpdateModal({
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) {
+                  if (f.size > 100 * 1024 * 1024) {
+                    toast.error("Ukuran file tidak boleh lebih dari 100 MB");
+                    e.target.value = "";
+                    return;
+                  }
                   setSelectedFile(f);
                   setFileName(f.name);
                 }
@@ -1122,11 +1127,6 @@ export default function TimelineTable({
           </div>
         ) : (
           <div className="rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-            {/*
-              ── SINGLE TABLE dengan sticky thead ──────────────────────────────
-              Menggunakan satu tabel tunggal agar lebar kolom timeline
-              di header dan body SELALU identik → garis batas minggu lurus.
-            */}
             <div
               className="overflow-x-auto overflow-y-auto"
               style={{ maxHeight: "60vh" }}
