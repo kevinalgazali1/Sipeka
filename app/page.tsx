@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,6 +12,7 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,7 +29,7 @@ export default function LoginPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ username, password }),
-        }
+        },
       );
 
       if (!res.ok) {
@@ -65,7 +67,6 @@ export default function LoginPage() {
   return (
     <section className="min-h-screen bg-[#3a0000]">
       <div className="relative min-h-screen overflow-hidden">
-        
         <Image
           src="/background.png"
           alt="Background"
@@ -77,18 +78,16 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-black/60" />
 
         <div className="relative z-10 flex min-h-screen flex-col md:flex-row">
-          
           {/* ================= LEFT ================= */}
           <div className="flex-1 flex flex-col justify-center px-12 pt-4 md:px-20 text-white">
-            
             <h1 className="text-5xl font-extrabold tracking-wide mb-6">
               MONEVPRIO
             </h1>
 
             <p className="max-w-xl text-lg text-gray-200 leading-relaxed">
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit,
-              sed do eiusmod tempor incididunt ut labore et dolore
-              magna aliqua. Ut enim ad minim veniam.
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+              eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut
+              enim ad minim veniam.
             </p>
 
             <div className="relative mt-10 flex items-end">
@@ -111,9 +110,7 @@ export default function LoginPage() {
 
           {/* ================= RIGHT ================= */}
           <div className="flex-1 flex items-center justify-center px-10 md:px-20">
-            
             <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-10 border-t-16 border-[#CB0E0E]">
-
               <div className="flex justify-center mb-6">
                 <div className="bg-[#CB0E0E] w-20 h-20 rounded-2xl flex items-center justify-center text-white text-3xl shadow-xl">
                   <Image
@@ -148,14 +145,23 @@ export default function LoginPage() {
 
                 <div>
                   <label className="text-sm">Password</label>
-                  <input
-                    type="password"
-                    placeholder="*********"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="w-full mt-2 px-4 py-2 border border-gray-300 placeholder:text-gray-400 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition"
-                  />
+                  <div className="relative mt-2">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="*********"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="w-full px-4 py-2 border border-gray-300 placeholder:text-gray-400 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
 
                 <button
@@ -166,10 +172,8 @@ export default function LoginPage() {
                   {loading ? "Loading..." : "Sign In"}
                 </button>
               </form>
-
             </div>
           </div>
-
         </div>
       </div>
     </section>

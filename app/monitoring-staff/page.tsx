@@ -143,7 +143,7 @@ export default function InstansiPage() {
               <div
                 key={item.id}
                 onClick={() => handleMasukInstansi(item.namaDinas)}
-                className="relative w-50 bg-white rounded-3xl shadow-lg p-6 hover:shadow-xl transition border-t-16 border-[#CB0E0E] cursor-pointer"
+                className="relative w-50 bg-white rounded-3xl shadow-lg p-6 hover:shadow-xl transition border-t-16 border-[#CB0E0E] cursor-pointer flex flex-col"
               >
                 <div className="flex justify-between items-center mt-6 mb-6">
                   <div className="bg-[#CB0E0E] w-14 h-14 rounded-2xl flex items-center justify-center text-white text-2xl shadow">
@@ -157,19 +157,18 @@ export default function InstansiPage() {
                   )}
                 </div>
 
-                <h2 className="text-xl font-bold mb-1">{item.namaDinas}</h2>
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold mb-1">{item.namaDinas}</h2>
+                  <p className="text-xs text-gray-500">Program Prioritas</p>
+                  <p className="text-sm text-[#CB0E0E] font-semibold">
+                    {item.programPrioritas} / {item.totalProgram}
+                  </p>
+                </div>
 
-                <p className="text-xs text-gray-500">Program Prioritas</p>
-
-                <p className="text-sm text-[#CB0E0E] font-semibold mb-8">
-                  {item.programPrioritas} / {item.totalProgram}
-                </p>
-
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center mt-6">
                   <button className="text-xs text-[#CB0E0E] tracking-widest uppercase">
                     Masuk Instansi
                   </button>
-
                   <div className="w-7 h-7 rounded-full border border-gray-400 flex items-center justify-center">
                     <ArrowRight size={14} />
                   </div>

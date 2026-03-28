@@ -287,9 +287,9 @@ export default function AdminProgramPage() {
                 >
                   <div
                     className="relative bg-white rounded-3xl shadow-lg p-4 
-hover:shadow-xl transition border-t-16 border-[#CB0E0E] 
-flex flex-col cursor-pointer hover:scale-[1.02] duration-200
-h-90"
+                    hover:shadow-xl transition border-t-16 border-[#CB0E0E] 
+                    flex flex-col cursor-pointer hover:scale-[1.02] duration-200
+                    h-90"
                   >
                     <div>
                       <div className="relative flex justify-between items-center mt-10 mb-6">
