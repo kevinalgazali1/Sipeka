@@ -129,8 +129,8 @@ export default function ArsipDigitalProgram() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Maksimal ukuran file 5MB");
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error("Maksimal ukuran file 100MB");
       return;
     }
 
